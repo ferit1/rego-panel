@@ -1,6 +1,6 @@
 {
   "version": "1.2.0",
-  "package": "https://github.com/ferit1/rego-panel/archive/refs/tags/v1.2.0.zip",
+  "package": "https://github.com/ferit1/rego-panel/archive/57d53d26a3e9fb0fed9b4fe8049dfc117665e81a.zip",
   "date": "2026-10-22",
   "notes": "Panel kendi kendini güncelleyebiliyor; Ayarlar'a 'Güncellemeleri denetle' eklendi."
 }
