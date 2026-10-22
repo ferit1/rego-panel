@@ -1,0 +1,1289 @@
+/* Rego Panel — single-page app on top of the rego/v1 REST API. No build step. */
+(function () {
+  'use strict';
+  var C = window.REGO || {};
+  var B = null;           // bootstrap payload: me, caps, users, settings, data
+  var st = { view: 'dash', id: null, q: '', tab: {}, para: null, cal: null, forms: {}, dirty: false, menu: null };
+  var AY = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+  var AYU = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+  var PARA = ['₺', '$', '€', '£'];
+  var STAGES = [['onay', 'Onaylandı'], ['tarama', 'Taramada'], ['model', 'Modelleme / Rapor'], ['teslim', 'Teslim edildi']];
+  var DURUM = { taslak: ['mute', 'Taslak'], gonderildi: ['warn', 'Yanıt bekliyor'], onaylandi: ['ok', 'Onaylandı'], reddedildi: ['bad', 'Reddedildi'], faturalandi: ['info', 'Faturalandı'] };
+  var ROLES = { rego_yonetici: 'Yönetici', rego_satis: 'Satış', rego_saha: 'Saha ekibi', administrator: 'Site yöneticisi', pasif: 'Pasif' };
+  var KOS_BASLIK = ['Ödeme Şartları', 'Teslim Süresi', 'Dataların Teslimi', 'Önemli Notlar', 'Garanti', 'Geçerlilik Süresi'];
+
+  /* ---------- utilities ---------- */
+  function $(s, el) { return (el || document).querySelector(s); }
+  function $$(s, el) { return Array.prototype.slice.call((el || document).querySelectorAll(s)); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function can(c) { return !!(B && B.caps && B.caps[c]); }
+  function lc(s) { return String(s || '').toLocaleLowerCase('tr'); }
+  function num(n) {
+    n = Number(n) || 0;
+    var dec = Math.abs(n - Math.round(n)) > 0.0001 ? 2 : 0;
+    return new Intl.NumberFormat('tr-TR', { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(n);
+  }
+  function money(n, p) { return num(n) + ' ' + (p || '₺'); }
+  function parseNum(v) {
+    v = String(v == null ? '' : v).trim().replace(/\s/g, '');
+    if (v === '') return 0;
+    if (v.indexOf(',') > -1) v = v.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(\.\d{3})+$/.test(v)) v = v.replace(/\./g, '');
+    var n = parseFloat(v);
+    return isNaN(n) ? 0 : n;
+  }
+  function dt(s) { return new Date(s + 'T00:00:00'); }
+  function fmtD(s) { if (!s) return '—'; var d = dt(s); return d.getDate() + ' ' + AY[d.getMonth()] + ' ' + d.getFullYear(); }
+  function addDays(s, n) { var d = dt(s); d.setDate(d.getDate() + n); return iso(d); }
+  function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function today() { return B.today; }
+  function initials(n) { return String(n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w[0]; }).join('').toLocaleUpperCase('tr'); }
+  function list(k) { return (B.data && B.data[k]) || []; }
+  function byId(k, id) { id = Number(id); return list(k).find(function (x) { return x.id === id; }) || null; }
+  function firma(id) { var m = byId('musteri', id); return m ? m.firma : '—'; }
+  function user(id) { id = Number(id); return B.users.find(function (u) { return u.id === id; }) || null; }
+  function chip(kind, txt) { return '<span class="chip c-' + kind + '">' + esc(txt) + '</span>'; }
+  function sumBy(rows) { // rows: [{para, v}] -> {para: total}
+    var o = {}; rows.forEach(function (r) { o[r.para] = (o[r.para] || 0) + r.v; }); return o;
+  }
+  function sumTxt(o, sep) {
+    var ks = PARA.filter(function (p) { return o[p]; });
+    return ks.length ? ks.map(function (p) { return money(o[p], p); }).join(sep || ' · ') : '—';
+  }
+  function upsert(k, item) {
+    if (!B.data[k]) B.data[k] = [];
+    var i = B.data[k].findIndex(function (x) { return x.id === item.id; });
+    if (i > -1) B.data[k][i] = item; else B.data[k].unshift(item);
+  }
+  function drop(k, id) { B.data[k] = list(k).filter(function (x) { return x.id !== id; }); }
+  function match(s) { return !st.q || lc(s).indexOf(st.q) > -1; }
+  function getPath(o, p) { return p.split('.').reduce(function (a, k) { return a == null ? a : a[k]; }, o); }
+  function setPath(o, p, v) {
+    var ks = p.split('.'), last = ks.pop();
+    var t = ks.reduce(function (a, k) { return a[k]; }, o);
+    t[last] = v;
+  }
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+  function toast(msg, err) {
+    $$('.toast').forEach(function (x) { x.remove(); });
+    var t = document.createElement('div');
+    t.className = 'toast' + (err ? ' err' : '');
+    t.setAttribute('role', 'status');
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, err ? 4200 : 2400);
+  }
+
+  function api(path, method, body) {
+    var opt = { method: method || 'GET', credentials: 'same-origin', headers: { 'X-WP-Nonce': C.nonce } };
+    if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+    return fetch(C.api + path, opt).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) {
+          var m = j && j.message ? String(j.message).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : 'İşlem tamamlanamadı (' + r.status + ').';
+          if (j && j.code === 'internal_server_error') m = 'Sunucuda bir hata oluştu. WordPress yöneticisine gelen “Teknik sorun” e-postasında ayrıntı yazar.';
+          if (r.status === 401 || (j && j.code === 'rest_cookie_invalid_nonce')) m = 'Oturumunuz sona erdi. Sayfayı yenileyip tekrar giriş yapın.';
+          if (r.status === 403 && j && j.code === 'rest_forbidden') m = 'Bu işlem için yetkiniz yok.';
+          throw new Error(m);
+        }
+        return j;
+      });
+    });
+  }
+  function fail(e) { toast(e.message || String(e), true); }
+
+  /* ---------- icons ---------- */
+  var I = {
+    dash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="8" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="15" width="7" height="6" rx="1.5"/></svg>',
+    musteri: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c2 .7 3.2 2.4 3.6 5.2"/></svg>',
+    teklif: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/></svg>',
+    proje: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z"/><path d="M3 12l9 4.5 9-4.5M3 16.5 12 21l9-4.5"/></svg>',
+    fatura: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5v.01M17.5 14.5v.01"/></svg>',
+    saha: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
+    kullanici: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 4 6v5c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>',
+    ayarlar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>'
+  };
+  var NAV = [
+    ['dash', 'Ana Panel', 'rego_access'], ['musteri', 'Müşteriler', 'rego_access'], ['teklif', 'Teklifler', 'rego_teklif'],
+    ['proje', 'Projeler', 'rego_access'], ['fatura', 'Finans', 'rego_access'], ['saha', 'Saha', 'rego_access'],
+    ['kullanici', 'Kullanıcılar', 'rego_kullanici'], ['ayarlar', 'Ayarlar', 'rego_ayarlar']
+  ];
+
+  function canFat() { return can('rego_fatura') && can('rego_finans') && !!B.data.fatura; }
+  function canKasa() { return can('rego_kasa') && !!B.data.hareket; }
+  function navOk(n) { return n[0] === 'fatura' ? (canFat() || canKasa()) : can(n[2]); }
+
+  /* ---------- shell ---------- */
+  function shell() {
+    var nav = NAV.filter(navOk).map(function (n) {
+      return '<button class="nav" data-go="' + n[0] + '" type="button">' + I[n[0]] + '<span>' + n[1] + '</span></button>';
+    }).join('');
+    document.getElementById('app').className = '';
+    document.getElementById('app').innerHTML =
+      '<div class="app">' +
+      '<nav class="rail" id="rail" aria-label="Ana menü"><div class="side-logo"><img src="' + esc(C.logo) + '" alt="Rego Technology"></div>' + nav + '</nav>' +
+      '<div class="drawer-scrim" id="scrim" data-act="close-drawer"></div>' +
+      '<div class="main"><header class="top">' +
+      '<button class="menu-btn" type="button" data-act="open-drawer" aria-label="Menüyü aç"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>' +
+      '<label class="search" for="q"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="Müşteri, teklif, proje ara…" autocomplete="off"></label>' +
+      '<span class="sp"></span>' +
+      '<div class="who"><button class="who-btn" type="button" data-act="user-menu" aria-haspopup="true"><span class="avatar">' + esc(initials(displayName(B.me))) + '</span><span class="who-txt"><b>' + esc(displayName(B.me)) + '</b><small>' + esc(ROLES[B.me.rol] || '') + '</small></span></button></div>' +
+      '</header><main class="content" id="view" tabindex="-1"></main></div></div>' +
+      '<div id="layer"></div>';
+  }
+
+  function render() {
+    closeMenu();
+    var v = VIEWS[st.view] ? st.view : 'dash';
+    var html = VIEWS[v]();
+    $('#view').innerHTML = html;
+    $$('.nav').forEach(function (b) { if (b.dataset.go === v) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+    if (AFTER[v]) AFTER[v]();
+    $$('textarea[data-auto]').forEach(autosize);
+  }
+
+  function route() {
+    var h = (location.hash || '#dash').slice(1).split('/');
+    var v = h[0] || 'dash';
+    var allowed = NAV.some(function (n) { return n[0] === v && navOk(n); }) || v === 'ara';
+    st.view = allowed ? v : 'dash';
+    st.id = h[1] || null;
+    if (st.view !== 'teklif' || !st.id) st.forms.E = null;
+    st.dirty = false;
+    render();
+    $('#rail').classList.remove('open'); $('#scrim').classList.remove('open');
+    window.scrollTo(0, 0);
+  }
+  function go(hash) {
+    if (location.hash === '#' + hash) route(); else location.hash = hash;
+  }
+
+  /* ---------- shared bits ---------- */
+  function sahaLi(s) {
+    var d = dt(s.tarih);
+    var done = s.durum === 'tamamlandi', iptal = s.durum === 'iptal';
+    return '<div class="li"><div class="date"><b>' + d.getDate() + '</b><small>' + AY[d.getMonth()] + '</small></div>' +
+      '<div style="min-width:0"><div class="t">' + esc(s.is_tanimi) + (done ? ' ' + chip('ok', 'Tamamlandı') : iptal ? ' ' + chip('mute', 'İptal') : '') + '</div>' +
+      '<div class="m">' + esc(firma(s.musteri_id)) + (s.konum ? ' · ' + esc(s.konum) : '') + '</div></div>' +
+      '<div class="m" style="text-align:right"><span class="mono">' + esc(s.saat || '') + '</span><br>' + esc(s.ekip || '') + '</div>' +
+      (can('rego_saha_edit') ? '' : '') + '</div>';
+  }
+  function stageChip(s) { return { onay: chip('mute', 'Onaylandı'), tarama: chip('info', 'Taramada'), model: chip('warn', 'Modelleme'), teslim: chip('ok', 'Teslim edildi') }[s] || ''; }
+  function durumChip(d) { var x = DURUM[d] || DURUM.taslak; return chip(x[0], x[1]); }
+  function invState(f) { if (f.odendi) return chip('ok', 'Ödendi'); return f.vade && f.vade < today() ? chip('bad', 'Gecikmiş') : chip('warn', 'Bekliyor'); }
+  function teklifTop(t) { return sumTxt(t.toplamlar || {}); }
+  function emptyRow(cols, title, hint) { return '<tr><td colspan="' + cols + '" class="empty"><b>' + esc(title) + '</b>' + esc(hint || '') + '</td></tr>'; }
+  /* Everything that falls on a date: field visits, payments, project deliveries, invoice due dates. */
+  function dayEvents(ds) {
+    var ev = [];
+    list('saha').forEach(function (s) {
+      if (s.tarih !== ds || s.durum === 'iptal') return;
+      ev.push({ k: 'saha', t: 'Saha: ' + s.is_tanimi, m: [s.saat, firma(s.musteri_id) !== '—' ? firma(s.musteri_id) : '', s.konum].filter(Boolean).join(' · '), act: can('rego_saha_edit') ? 'saha-edit' : '', id: s.id, go: 'saha', done: s.durum === 'tamamlandi' });
+    });
+    list('hareket').forEach(function (h) {
+      if (h.tarih !== ds) return;
+      ev.push({ k: 'odeme', t: (h.tur === 'gelir' ? 'Gelir: ' : 'Ödeme: ') + (h.aciklama || h.kategori), m: money(h.tutar, h.para) + (h.durum === 'odendi' ? (h.tur === 'gelir' ? ' · alındı' : ' · ödendi') : (h.tur === 'gelir' ? ' · bekleniyor' : ' · ödenecek')), act: 'hareket-edit', id: h.id, go: 'fatura', done: h.durum === 'odendi' });
+    });
+    list('proje').forEach(function (p) {
+      if (p.teslim !== ds || p.asama === 'teslim') return;
+      ev.push({ k: 'teslim', t: 'Teslim: ' + p.ad, m: p.kod + ' · ' + firma(p.musteri_id), act: can('rego_proje_edit') ? 'proje-edit' : '', id: p.id, go: 'proje' });
+    });
+    list('fatura').forEach(function (f) {
+      if (f.vade !== ds || f.odendi) return;
+      ev.push({ k: 'fatura', t: 'Fatura vadesi: ' + firma(f.musteri_id), m: money(f.tutar, f.para) + (f.no ? ' · ' + f.no : ''), act: 'fatura-edit', id: f.id, go: 'fatura' });
+    });
+    return ev;
+  }
+  var EV_KIND = { saha: 'Saha ziyareti', odeme: 'Ödeme / gelir', teslim: 'Proje teslimi', fatura: 'Fatura vadesi' };
+  function calendar(y, m) {
+    var first = new Date(y, m, 1), off = (first.getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate();
+    var pre = y + '-' + String(m + 1).padStart(2, '0') + '-';
+    var c = '', kinds = {};
+    for (var i = 0; i < off; i++) c += '<span></span>';
+    for (var d = 1; d <= days; d++) {
+      var ds = pre + String(d).padStart(2, '0');
+      var ev = dayEvents(ds);
+      var cls = 'cd' + (ds === today() ? ' today' : '') + (ev.length ? ' mark' : '');
+      if (!ev.length) { c += '<span class="' + cls + '">' + d + '</span>'; continue; }
+      var dots = {}; ev.forEach(function (e) { dots[e.k] = 1; kinds[e.k] = 1; });
+      c += '<button type="button" class="' + cls + '" data-act="cal-day" data-d="' + ds + '" aria-label="' + d + ' ' + AYU[m] + ': ' + ev.length + ' kayıt" aria-haspopup="true">' + d +
+        '<i class="dots">' + Object.keys(EV_KIND).filter(function (k) { return dots[k]; }).map(function (k) { return '<i class="dot d-' + k + '"></i>'; }).join('') + '</i></button>';
+    }
+    var legend = Object.keys(EV_KIND).filter(function (k) { return kinds[k]; }).map(function (k) { return '<span><i class="dot d-' + k + '"></i>' + EV_KIND[k] + '</span>'; }).join('');
+    return '<div class="cal">' + ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map(function (g) { return '<b>' + g + '</b>'; }).join('') + c + '</div>' +
+      (legend ? '<div class="cal-legend">' + legend + '<span class="muted">· Güne gelince ayrıntı görünür</span></div>' : '');
+  }
+  function calPopHtml(ds) {
+    var d = dt(ds);
+    return '<div class="calpop-h">' + d.getDate() + ' ' + AYU[d.getMonth()] + ' ' + ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'][d.getDay()] + '</div>' +
+      dayEvents(ds).map(function (e) {
+        var attrs = e.act ? 'data-act="' + e.act + '" data-id="' + e.id + '"' : 'data-go="' + e.go + '"';
+        return '<button type="button" class="calpop-i' + (e.done ? ' done' : '') + '" ' + attrs + '><i class="dot d-' + e.k + '"></i><span><b>' + esc(e.t) + '</b><small>' + esc(e.m) + '</small></span></button>';
+      }).join('');
+  }
+  var calTimer = null;
+  function showCalPop(cell) {
+    clearTimeout(calTimer);
+    var wrap = cell.closest('.cal'); if (!wrap) return;
+    var pop = $('#calpop', wrap);
+    if (pop && pop.dataset.d === cell.dataset.d) return;
+    hideCalPop(true);
+    pop = document.createElement('div'); pop.id = 'calpop'; pop.className = 'calpop'; pop.dataset.d = cell.dataset.d; pop.setAttribute('role', 'dialog');
+    pop.innerHTML = calPopHtml(cell.dataset.d);
+    wrap.appendChild(pop);
+    var w = pop.offsetWidth, left = cell.offsetLeft + cell.offsetWidth / 2 - w / 2;
+    left = Math.max(0, Math.min(left, wrap.clientWidth - w));
+    pop.style.left = left + 'px'; pop.style.top = (cell.offsetTop + cell.offsetHeight + 6) + 'px';
+    cell.setAttribute('aria-expanded', 'true');
+  }
+  function hideCalPop(now) {
+    clearTimeout(calTimer);
+    var go = function () { var p = $('#calpop'); if (p) p.remove(); $$('.cd[aria-expanded]').forEach(function (c) { c.removeAttribute('aria-expanded'); }); };
+    if (now) go(); else calTimer = setTimeout(go, 220);
+  }
+  function newMenu() {
+    var items = [['musteri', 'Müşteri', 'rego_musteri_edit'], ['teklif', 'Fiyat teklifi', 'rego_teklif'], ['proje', 'Proje', 'rego_proje_edit'], ['saha', 'Saha ziyareti', 'rego_saha_edit'], ['fatura', 'Fatura kaydı', 'rego_fatura'], ['gelir', 'Gelir (faturasız ödeme)', 'rego_kasa'], ['gider', 'Gider / ödeme (kira vb.)', 'rego_kasa']];
+    items = items.filter(function (x) { return can(x[2]); });
+    if (!items.length) return '';
+    return '<div class="row" style="position:relative"><button class="btn primary" type="button" data-act="new-menu" aria-haspopup="true">+ Yeni kayıt</button></div>';
+  }
+
+  /* ---------- views ---------- */
+  var VIEWS = {}, AFTER = {};
+
+  VIEWS.dash = function () {
+    var h = new Date().getHours();
+    var hi = h < 11 ? 'Günaydın' : h < 18 ? 'İyi günler' : 'İyi akşamlar';
+    var first = B.me.ad && B.me.ad !== B.me.login ? String(B.me.ad).split(' ')[0] : displayName(B.me);
+    var aktif = list('proje').filter(function (p) { return p.asama !== 'teslim'; });
+    var hafta = addDays(today(), 7);
+    var yak = list('saha').filter(function (s) { return s.tarih >= today() && s.durum !== 'iptal' && s.durum !== 'tamamlandi'; });
+    var buHafta = yak.filter(function (s) { return s.tarih <= hafta; });
+    var bekT = list('teklif').filter(function (t) { return t.durum === 'gonderildi'; });
+    var subs = [aktif.length + ' aktif proje', buHafta.length + ' saha ziyareti önümüzdeki 7 günde'];
+    if (can('rego_teklif')) subs.push(bekT.length + ' teklif yanıt bekliyor');
+
+    var kpis = '';
+    if (can('rego_finans') && B.data.fatura) {
+      var ay = today().slice(0, 7);
+      var fs = list('fatura');
+      var acik = fs.filter(function (f) { return !f.odendi; });
+      var gec = acik.filter(function (f) { return f.vade && f.vade < today(); });
+      kpis = kpi('Aktif proje', aktif.length, aktif.filter(function (p) { return p.asama === 'tarama'; }).length + ' tanesi taramada') +
+        kpi('Yanıt bekleyen teklif', bekT.length, sumTxt(sumBy(flatTop(bekT)))) +
+        kpi('Bu ay faturalanan', '<small>' + sumTxt(sumBy(fs.filter(function (f) { return f.tarih.indexOf(ay) === 0; }).map(fv)), '<br>') + '</small>', fs.filter(function (f) { return f.tarih.indexOf(ay) === 0; }).length + ' fatura kaydı') +
+        kpi('Bekleyen tahsilat', '<small>' + sumTxt(sumBy(acik.map(fv)), '<br>') + '</small>', gec.length ? '<span style="color:var(--bad);font-weight:700">' + gec.length + ' gecikmiş fatura</span>' : 'Gecikme yok');
+    } else {
+      var yakin = aktif.filter(function (p) { return p.teslim && p.teslim <= hafta; });
+      kpis = kpi('Aktif proje', aktif.length, 'Teslim edilmemiş işler') +
+        kpi('Taramada', aktif.filter(function (p) { return p.asama === 'tarama'; }).length, 'Saha veya atölyede') +
+        kpi('Bu hafta saha', buHafta.length, yak.length + ' planlı ziyaret toplam') +
+        kpi('Teslimi 7 gün içinde', yakin.length, yakin.length ? 'Önceliklendirin' : 'Yakın teslim yok');
+    }
+
+    var left;
+    if (can('rego_finans') && B.data.fatura) {
+      left = '<div class="panel"><div class="panel-h"><div><h2>Tahsil edilen</h2><p>Son 6 ay · faturalı ve faturasız ödemeler</p></div>' + paraSeg() + '</div>' + chart() + '</div>';
+    } else {
+      var soon = aktif.slice().sort(function (a, b) { return String(a.teslim || '9').localeCompare(String(b.teslim || '9')); }).slice(0, 6);
+      left = '<div class="panel"><div class="panel-h"><div><h2>Teslimi yaklaşan projeler</h2><p>Teslim tarihine göre</p></div><button class="btn sm" data-go="proje">Proje panosu</button></div><div class="list">' +
+        (soon.map(function (p) { return '<div class="li" style="grid-template-columns:minmax(0,1fr) auto"><div><div class="t">' + esc(p.ad) + '</div><div class="m">' + esc(firma(p.musteri_id)) + ' · ' + esc(p.hizmet) + '</div></div><div class="r">' + stageChip(p.asama) + '<div class="m num">' + fmtD(p.teslim) + '</div></div></div>'; }).join('') || '<p class="empty">Aktif proje yok.</p>') + '</div></div>';
+    }
+    var right = '<div class="panel"><div class="panel-h"><div><h2>Yaklaşan saha ziyaretleri</h2><p>Türkiye geneli mobil ekip</p></div><button class="btn sm" data-go="saha">Tümü</button></div><div class="list">' +
+      (yak.slice(0, 5).map(sahaLi).join('') || '<p class="empty">Planlı ziyaret yok.</p>') + '</div></div>';
+
+    var row2 = '';
+    if (can('rego_teklif')) {
+      var son = list('teklif').slice(0, 6);
+      row2 = '<section class="panel"><div class="panel-h"><div><h2>Son teklifler</h2><p>En son hazırlananlar</p></div><button class="btn sm" data-go="teklif">Tüm teklifler</button></div><div class="tablewrap"><table class="t"><thead><tr><th>No</th><th>Firma</th><th>Tarih</th><th>Durum</th><th class="r">Tutar (KDV hariç)</th></tr></thead><tbody>' +
+        (son.map(function (t) { return '<tr class="click" data-go="teklif/' + t.id + '"><td class="mono">' + esc(t.no) + '</td><td class="strong">' + esc(t.firma) + '</td><td class="num">' + fmtD(t.tarih) + '</td><td>' + durumChip(t.durum) + '</td><td class="r num strong">' + esc(teklifTop(t)) + '</td></tr>'; }).join('') || emptyRow(5, 'Henüz teklif yok.', ' “+ Yeni kayıt” ile ilk teklifi hazırlayın.')) +
+        '</tbody></table></div></section>';
+    }
+    if (canKasa()) {
+      var odm = '<section class="panel"><div class="panel-h"><div><h2>Yaklaşan ödemeler</h2><p>Önümüzdeki 30 gün ve gecikenler</p></div><button class="btn sm" data-act="fin-kasa">Gelir ve giderler</button></div><div class="list">' +
+        (yaklasanOdemeler().slice(0, 6).map(odemeLi).join('') || '<p class="empty"><b>Bekleyen ödeme yok.</b>Kira gibi giderleri “+ Yeni kayıt” ile ekleyin.</p>') + '</div></section>';
+      row2 = row2 ? '<div class="grid2">' + row2 + odm + '</div>' : odm;
+    }
+    var now = new Date();
+    var row3 = '<section class="grid2"><div class="panel"><div class="panel-h"><div><h2>Devam eden projeler</h2><p>Teslim tarihine göre</p></div><button class="btn sm" data-go="proje">Proje panosu</button></div><div class="tablewrap"><table class="t"><thead><tr><th>Kod</th><th>Proje</th><th>Aşama</th><th class="r">Teslim</th></tr></thead><tbody>' +
+      (aktif.slice().sort(function (a, b) { return String(a.teslim || '9').localeCompare(String(b.teslim || '9')); }).slice(0, 8).map(function (p) { return '<tr><td class="mono">' + esc(p.kod) + '</td><td><div class="strong">' + esc(p.ad) + '</div><div class="small muted">' + esc(firma(p.musteri_id)) + ' · <span class="svc">' + esc(p.hizmet) + '</span></div></td><td>' + stageChip(p.asama) + '</td><td class="r num">' + fmtD(p.teslim) + '</td></tr>'; }).join('') || emptyRow(4, 'Aktif proje yok.')) +
+      '</tbody></table></div></div><div class="panel"><div class="panel-h"><div><h2>' + AYU[now.getMonth()] + ' ' + now.getFullYear() + '</h2><p>Saha, ödeme, teslim ve vade günleri</p></div></div>' + calendar(now.getFullYear(), now.getMonth()) + '</div></section>';
+
+    return '<div class="head"><div><h1>' + hi + ', ' + esc(first) + '.</h1><p class="sub">' + subs.join(' · ') + '</p></div>' + newMenu() + '</div>' +
+      '<section class="kpis">' + kpis + '</section><section class="grid2">' + left + right + '</section>' + row2 + row3;
+  };
+  function kpi(l, v, n) { return '<div class="kpi"><span class="lab">' + esc(l) + '</span><span class="val">' + v + '</span><span class="note">' + n + '</span></div>'; }
+  function fv(f) { return { para: f.para, v: Number(f.tutar) }; }
+  function flatTop(ts) { var r = []; ts.forEach(function (t) { Object.keys(t.toplamlar || {}).forEach(function (p) { r.push({ para: p, v: t.toplamlar[p] }); }); }); return r; }
+  function paidPara() {
+    var o = {}; list('fatura').forEach(function (f) { if (f.odendi) o[f.para] = (o[f.para] || 0) + 1; });
+    list('hareket').forEach(function (h) { if (h.tur === 'gelir' && h.durum === 'odendi') o[h.para] = (o[h.para] || 0) + 1; });
+    var ks = PARA.filter(function (p) { return o[p]; });
+    return ks.length ? ks : ['₺'];
+  }
+  function paraSeg() {
+    var ks = paidPara();
+    if (!st.para || ks.indexOf(st.para) < 0) st.para = ks[0];
+    if (ks.length < 2) return '';
+    return '<div class="seg" role="group" aria-label="Para birimi">' + ks.map(function (p) { return '<button type="button" data-act="para" data-p="' + esc(p) + '" aria-pressed="' + (p === st.para) + '">' + esc(p) + '</button>'; }).join('') + '</div>';
+  }
+  function chart() {
+    var p = st.para || '₺';
+    var now = new Date(), months = [];
+    for (var i = 5; i >= 0; i--) { var d = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push({ k: iso(d).slice(0, 7), l: AY[d.getMonth()], v: 0 }); }
+    list('fatura').forEach(function (f) {
+      if (!f.odendi || f.para !== p) return;
+      var k = String(f.odeme_tarihi || f.tarih).slice(0, 7);
+      var m = months.find(function (x) { return x.k === k; }); if (m) m.v += Number(f.tutar);
+    });
+    list('hareket').forEach(function (h) {
+      if (h.tur !== 'gelir' || h.durum !== 'odendi' || h.para !== p) return;
+      var k = String(h.odeme_tarihi || h.tarih).slice(0, 7);
+      var m = months.find(function (x) { return x.k === k; }); if (m) m.v += Number(h.tutar);
+    });
+    var mx = Math.max.apply(null, months.map(function (m) { return m.v; }));
+    if (mx <= 0) return '<p class="empty"><b>Bu dönemde tahsilat yok.</b>Ödendi olarak işaretlenen faturalar burada görünür.</p>';
+    var raw = mx / 4, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    var nice = [1, 2, 2.5, 5, 10].map(function (f) { return f * mag; }).find(function (v) { return v >= raw; });
+    var top = nice * 4;
+    var ax = [4, 3, 2, 1, 0].map(function (i) { var v = top / 4 * i; return '<span>' + (v >= 1000 ? num(v / 1000) + 'b' : num(v)) + '</span>'; }).join('');
+    return '<div class="bars"><div class="yax">' + ax + '</div><div class="plot">' + months.map(function (m, i) {
+      var last = i === months.length - 1;
+      return '<div class="bar' + (last ? ' cur' : '') + '" style="height:' + (m.v / top * 100) + '%" title="' + esc(m.l + ': ' + money(m.v, p)) + '">' + (last && m.v ? '<em>' + esc(money(m.v, p)) + '</em>' : '') + '<span>' + m.l + '</span></div>';
+    }).join('') + '</div></div>';
+  }
+
+  VIEWS.ara = function () {
+    var q = st.q;
+    var ms = list('musteri').filter(function (m) { return match([m.firma, m.kisi, m.sehir, m.email].join(' ')); }).slice(0, 8);
+    var ts = list('teklif').filter(function (t) { return match([t.no, t.firma, t.kisi].join(' ')); }).slice(0, 8);
+    var ps = list('proje').filter(function (p) { return match([p.kod, p.ad, firma(p.musteri_id)].join(' ')); }).slice(0, 8);
+    function grp(title, rows) { return '<div class="panel"><div class="panel-h"><h2>' + title + '</h2><span class="chip c-mute">' + rows.length + '</span></div><div class="list">' + (rows.join('') || '<p class="muted small">Eşleşme yok.</p>') + '</div></div>'; }
+    return '<div class="head"><div><h1>“' + esc(q) + '” için sonuçlar</h1></div></div><section class="grid2 even">' +
+      grp('Müşteriler', ms.map(function (m) { return '<div class="li" style="grid-template-columns:minmax(0,1fr) auto"><div><div class="t">' + esc(m.firma) + '</div><div class="m">' + esc([m.kisi, m.sehir].filter(Boolean).join(' · ')) + '</div></div><button class="btn sm" data-act="musteri-edit" data-id="' + m.id + '">Aç</button></div>'; })) +
+      (can('rego_teklif') ? grp('Teklifler', ts.map(function (t) { return '<div class="li" style="grid-template-columns:minmax(0,1fr) auto"><div><div class="t">' + esc(t.firma) + ' <span class="mono muted">' + esc(t.no) + '</span></div><div class="m">' + fmtD(t.tarih) + ' · ' + esc(teklifTop(t)) + '</div></div><button class="btn sm" data-go="teklif/' + t.id + '">Aç</button></div>'; })) : '') +
+      grp('Projeler', ps.map(function (p) { return '<div class="li" style="grid-template-columns:minmax(0,1fr) auto"><div><div class="t">' + esc(p.ad) + '</div><div class="m">' + esc(p.kod + ' · ' + firma(p.musteri_id)) + '</div></div>' + stageChip(p.asama) + '</div>'; })) +
+      '</section>';
+  };
+
+  VIEWS.musteri = function () {
+    var fin = can('rego_finans') && B.data.fatura;
+    var rows = list('musteri').filter(function (m) { return match([m.firma, m.kisi, m.sehir, m.email, m.tel, m.sektor].join(' ')); });
+    var head = '<tr><th>Firma</th><th>İlgili kişi</th><th>Telefon</th><th>E-posta</th><th>Şehir</th><th class="r">Proje</th>' + (can('rego_teklif') ? '<th class="r">Teklif</th>' : '') + (fin ? '<th class="r">Açık bakiye</th>' : '') + '</tr>';
+    var body = rows.map(function (m) {
+      var pc = list('proje').filter(function (p) { return p.musteri_id === m.id; }).length;
+      var tc = list('teklif').filter(function (t) { return t.musteri_id === m.id; }).length;
+      var bak = fin ? sumTxt(sumBy(list('fatura').filter(function (f) { return f.musteri_id === m.id && !f.odendi; }).map(fv))) : '';
+      return '<tr class="click" data-act="musteri-edit" data-id="' + m.id + '"><td><div class="strong">' + esc(m.firma) + '</div><div class="small muted">' + esc(m.sektor || '') + '</div></td><td>' + esc(m.kisi ? m.kisi + ' ' + (m.hitap || '') : '—') + '</td><td class="mono">' + esc(m.tel || '—') + '</td><td>' + esc(m.email || '—') + '</td><td>' + esc(m.sehir || '—') + '</td><td class="r num">' + pc + '</td>' +
+        (can('rego_teklif') ? '<td class="r num">' + tc + '</td>' : '') + (fin ? '<td class="r num' + (bak !== '—' ? ' strong' : '') + '">' + esc(bak) + '</td>' : '') + '</tr>';
+    }).join('');
+    var cols = 6 + (can('rego_teklif') ? 1 : 0) + (fin ? 1 : 0);
+    return '<div class="head"><div><h1>Müşteriler</h1><p class="sub">' + list('musteri').length + ' firma kayıtlı' + (st.q ? ' · “' + esc(st.q) + '” ile filtreli' : '') + '</p></div>' +
+      (can('rego_musteri_edit') ? '<button class="btn primary" type="button" data-act="musteri-new">+ Müşteri ekle</button>' : '') + '</div>' +
+      '<section class="panel"><div class="tablewrap"><table class="t"><thead>' + head + '</thead><tbody>' +
+      (body || emptyRow(cols, st.q ? 'Aramayla eşleşen müşteri yok.' : 'Henüz müşteri yok.', st.q ? '' : ' Teklif hazırladığınızda firma otomatik eklenir.')) + '</tbody></table></div></section>';
+  };
+
+  VIEWS.proje = function () {
+    var P = list('proje').filter(function (p) { return match([p.kod, p.ad, p.hizmet, firma(p.musteri_id)].join(' ')); });
+    var pct = { onay: 12, tarama: 45, model: 75, teslim: 100 };
+    var ed = can('rego_proje_edit');
+    return '<div class="head"><div><h1>Projeler</h1><p class="sub">' + (ed ? 'Bir işi sonraki aşamaya taşımak için “İlerlet”e basın.' : 'Projelerin aşamaları') + '</p></div>' +
+      (ed ? '<button class="btn primary" type="button" data-act="proje-new">+ Proje aç</button>' : '') + '</div>' +
+      '<section class="board">' + STAGES.map(function (s) {
+        var items = P.filter(function (p) { return p.asama === s[0]; });
+        if (s[0] === 'teslim') items = items.slice(0, 12);
+        return '<div class="col"><div class="col-h">' + s[1] + '<span>' + P.filter(function (p) { return p.asama === s[0]; }).length + '</span></div>' +
+          (items.map(function (p) {
+            var t = p.teklif_id ? byId('teklif', p.teklif_id) : null;
+            return '<article class="card"><div class="row" style="justify-content:space-between"><span class="mono muted">' + esc(p.kod) + '</span><span class="svc">' + esc(p.hizmet) + '</span></div>' +
+              '<div class="t">' + esc(p.ad) + '</div><div class="m">' + esc(firma(p.musteri_id)) + (p.notlar ? ' · ' + esc(p.notlar) : '') + (t ? ' · <a href="#teklif/' + t.id + '">' + esc(t.no) + '</a>' : '') + '</div>' +
+              '<div class="prog"><i style="width:' + pct[p.asama] + '%"></i></div>' +
+              '<div class="f"><span class="m num">Teslim ' + fmtD(p.teslim) + '</span><span class="row">' +
+              (ed ? '<button class="btn sm ghost" type="button" data-act="proje-edit" data-id="' + p.id + '">Düzenle</button>' : '') +
+              (ed && p.asama !== 'teslim' ? '<button class="btn sm" type="button" data-act="proje-adv" data-id="' + p.id + '">İlerlet →</button>' : '') + '</span></div></article>';
+          }).join('') || '<p class="m muted small" style="margin:4px 2px">Bu aşamada proje yok.</p>') + '</div>';
+      }).join('') + '</section>';
+  };
+
+  VIEWS.teklif = function () {
+    if (st.id) return editorView();
+    var tab = st.tab.teklif || 'tum';
+    var all = list('teklif').filter(function (t) { return match([t.no, t.firma, t.kisi].join(' ')); });
+    var rows = tab === 'tum' ? all : all.filter(function (t) { return t.durum === tab; });
+    var tabs = [['tum', 'Tümü'], ['taslak', 'Taslak'], ['gonderildi', 'Yanıt bekliyor'], ['onaylandi', 'Onaylandı'], ['reddedildi', 'Reddedildi'], ['faturalandi', 'Faturalandı']];
+    return '<div class="head"><div><h1>Fiyat teklifleri</h1><p class="sub">Firma ve kalemleri girin; PDF, Rego teklif formu düzeninde hazırlanır.</p></div><button class="btn primary" type="button" data-go="teklif/yeni">+ Yeni teklif</button></div>' +
+      '<div class="tabs" role="tablist">' + tabs.map(function (x) { var n = x[0] === 'tum' ? all.length : all.filter(function (t) { return t.durum === x[0]; }).length; return '<button class="tab" role="tab" type="button" data-act="tab" data-k="teklif" data-v="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">' + x[1] + ' (' + n + ')</button>'; }).join('') + '</div>' +
+      '<section class="panel"><div class="tablewrap"><table class="t"><thead><tr><th>No</th><th>Firma</th><th>İlgili kişi</th><th>Tarih</th><th>Gönderen</th><th>Durum</th><th class="r">Tutar (KDV hariç)</th><th></th></tr></thead><tbody>' +
+      (rows.map(function (t) {
+        var u = user(t.gonderen_id);
+        return '<tr class="click" data-go="teklif/' + t.id + '"><td class="mono">' + esc(t.no) + '</td><td class="strong">' + esc(t.firma) + '</td><td>' + esc(t.kisi || '—') + '</td><td class="num">' + fmtD(t.tarih) + '</td><td>' + esc(t.gonderen_ad || (u ? displayName(u) : '—')) + '</td><td>' + durumChip(t.durum) + '</td><td class="r num strong">' + esc(teklifTop(t)) + '</td>' +
+          '<td class="r"><a class="btn sm" href="' + pdfUrl(t.id) + '" target="_blank" rel="noopener" data-stop="1">PDF</a></td></tr>';
+      }).join('') || emptyRow(8, st.q ? 'Aramayla eşleşen teklif yok.' : 'Bu listede teklif yok.', st.q ? '' : ' “+ Yeni teklif” ile başlayın.')) +
+      '</tbody></table></div></section>';
+  };
+  function pdfUrl(id, dl) { return B.pdf_url + '&id=' + id + '&_wpnonce=' + B.pdf_nonce + (dl ? '&indir=1' : ''); }
+
+  /* ----- quote editor ----- */
+  function blankTeklif() {
+    var sb = (B.settings.sablonlar || [])[0];
+    return {
+      id: 0, no: '', musteri_id: 0, firma: '', kisi: '', kisi_email: '', kisi_tel: '', hitap: '', _tip: 'Bey', _hitapManual: false,
+      tarih: today(), gonderen_id: B.me.id, durum: 'taslak',
+      gonderen_ad: defaultHz().ad, gonderen_email: defaultHz().email, gonderen_tel: defaultHz().tel,
+      kalemler: [{ ad: '', miktar: 1, birim: 'Adet', fiyat: 0, para: '€', teslim: '' }],
+      kosullar: sb ? clone(sb.kosullar) : [], ek_baslik: sb ? sb.ek_baslik : '', ek_metin: sb ? sb.ek_metin : '', ek_yeni_sayfa: sb ? sb.ek_yeni_sayfa : 0, toplam_goster: 0
+    };
+  }
+  function loadEditor() {
+    if (st.forms.E && String(st.forms.E.id || 'yeni') === String(st.id)) return st.forms.E;
+    var E;
+    if (st.id === 'yeni') E = blankTeklif();
+    else {
+      var t = byId('teklif', st.id);
+      if (!t) return null;
+      E = clone(t);
+      var m = byId('musteri', t.musteri_id);
+      E._tip = (m && m.hitap) || (/Hanım,?$/.test(t.hitap) ? 'Hanım' : 'Bey');
+      E._hitapManual = !!t.hitap && t.hitap !== autoHitap(E);
+    }
+    st.forms.E = E;
+    return E;
+  }
+  function hazirlayanlar() { return (B.settings.hazirlayanlar || []); }
+  function defaultHz() {
+    var hs = hazirlayanlar(), me = B.me;
+    return hs.find(function (h) { return (h.email && lc(h.email) === lc(me.email)) || lc(h.ad) === lc(me.ad); }) || hs[0] || { ad: displayName(me), email: me.email, tel: me.tel };
+  }
+  function displayName(u) { return u && u.ad && u.ad !== u.login ? u.ad : (B.settings.firma_unvan || 'Rego Technology'); }
+  function autoHitap(E) { var f = String(E.kisi || '').trim().split(/\s+/)[0]; return f ? 'Sn. ' + f + ' ' + (E._tip || 'Bey') + ',' : ''; }
+
+  function editorView() {
+    var E = loadEditor();
+    if (!E) return '<div class="panel empty"><b>Teklif bulunamadı.</b><a href="#teklif">Tekliflere dön</a></div>';
+    var s = B.settings;
+    var dl = '<datalist id="dl-firma">' + list('musteri').map(function (m) { return '<option value="' + esc(m.firma) + '">'; }).join('') + '</datalist>' +
+      '<datalist id="dl-birim">' + (s.birimler || []).map(function (b) { return '<option value="' + esc(b) + '">'; }).join('') + '</datalist>' +
+      '<datalist id="dl-kos">' + KOS_BASLIK.map(function (b) { return '<option value="' + esc(b) + '">'; }).join('') + '</datalist>';
+    var isNew = !E.id;
+    var musteri = '<section class="panel"><div class="sec-h"><h2>Firma bilgileri</h2><span class="hint">Kayıtlı firmayı seçince kişi bilgileri dolar. Yeni firma, kaydedince müşterilere eklenir.</span></div>' +
+      '<div class="form c3">' +
+      fld('Firma', '<input id="e-firma" data-bind="firma" list="dl-firma" value="' + esc(E.firma) + '" required autocomplete="off">', 'full') +
+      fld('İlgili kişi', '<input id="e-kisi" data-bind="kisi" value="' + esc(E.kisi) + '">') +
+      fld('Hitap', '<select id="e-tip" data-bind="_tip"><option' + (E._tip === 'Bey' ? ' selected' : '') + '>Bey</option><option' + (E._tip === 'Hanım' ? ' selected' : '') + '>Hanım</option></select>') +
+      fld('Hitap satırı', '<input id="e-hitap" data-bind="hitap" value="' + esc(E.hitap || autoHitap(E)) + '" placeholder="Sn. Mustafa Bey,">') +
+      fld('E-posta', '<input id="e-mail" data-bind="kisi_email" type="email" value="' + esc(E.kisi_email) + '" placeholder="Boş bırakılırsa “-” yazılır">') +
+      fld('Telefon', '<input id="e-tel" data-bind="kisi_tel" type="tel" value="' + esc(E.kisi_tel) + '">') +
+      '</div></section>';
+
+    var items = '<section class="panel"><div class="sec-h"><h2>Ürün ve hizmetler</h2><span class="hint">Fiyatlar KDV hariç. Ürün adında satır atlayabilirsiniz.</span></div>' +
+      '<div class="item-h"><span>No</span><span>Ürün veya hizmet</span><span>Miktar</span><span>Birim</span><span>Birim fiyat</span><span>Para</span><span>Teslim süresi</span><span class="r">Toplam</span><span></span></div>' +
+      '<div class="items">' + E.kalemler.map(function (k, i) {
+        return '<div class="item"><span class="no">' + (i + 1) + '</span>' +
+          '<div class="c-urun"><span class="lbl">Ürün veya hizmet</span><textarea class="inp" id="k' + i + '-urun" data-bind="kalemler.' + i + '.ad" data-auto rows="2" aria-label="Ürün veya hizmet ' + (i + 1) + '">' + esc(k.ad) + '</textarea></div>' +
+          '<div class="c-m"><span class="lbl">Miktar</span><input class="inp num" id="k' + i + '-m" data-bind="kalemler.' + i + '.miktar" data-num inputmode="decimal" value="' + esc(num(k.miktar)) + '" aria-label="Miktar"></div>' +
+          '<div class="c-b"><span class="lbl">Birim</span><input class="inp" id="k' + i + '-b" data-bind="kalemler.' + i + '.birim" list="dl-birim" value="' + esc(k.birim) + '" aria-label="Birim"></div>' +
+          '<div class="c-f"><span class="lbl">Birim fiyat</span><input class="inp num" id="k' + i + '-f" data-bind="kalemler.' + i + '.fiyat" data-num inputmode="decimal" value="' + esc(k.fiyat ? num(k.fiyat) : '') + '" placeholder="0" aria-label="Birim fiyat"></div>' +
+          '<div class="c-p"><span class="lbl">Para</span><select class="inp" id="k' + i + '-p" data-bind="kalemler.' + i + '.para" aria-label="Para birimi">' + PARA.map(function (p) { return '<option' + (k.para === p ? ' selected' : '') + '>' + p + '</option>'; }).join('') + '</select></div>' +
+          '<div class="c-t"><span class="lbl">Teslim süresi</span><input class="inp" id="k' + i + '-t" data-bind="kalemler.' + i + '.teslim" value="' + esc(k.teslim) + '" placeholder="örn. 15 Gün" aria-label="Teslim süresi"></div>' +
+          '<span class="tot" data-tot="' + i + '">' + esc(money((k.miktar || 0) * (k.fiyat || 0), k.para)) + '</span>' +
+          '<span class="c-x"><button class="icon-btn x" type="button" data-act="kalem-del" data-i="' + i + '" aria-label="Kalemi sil" title="Kalemi sil">×</button></span></div>';
+      }).join('') + '</div>' +
+      '<div class="row" style="margin-top:12px;justify-content:space-between"><button class="btn sm" type="button" data-act="kalem-add">+ Kalem ekle</button>' +
+      '<label class="check" for="e-tg"><input id="e-tg" type="checkbox" data-bind="toplam_goster"' + (E.toplam_goster ? ' checked' : '') + '> PDF’te tablo altına genel toplamı yaz</label></div></section>';
+
+    var kos = '<section class="panel"><div class="sec-h"><h2>Teklif koşulları</h2><div class="row"><select class="inp" id="e-sablon" style="width:auto;max-width:280px" aria-label="Koşul şablonu"><option value="">Şablon seç…</option>' +
+      (s.sablonlar || []).map(function (x, i) { return '<option value="' + i + '">' + esc(x.ad) + '</option>'; }).join('') + '</select><button class="btn sm" type="button" data-act="sablon-uygula">Uygula</button></div></div>' +
+      kosEditor(E, 'E') + '</section>';
+
+    var ek = '<section class="panel"><div class="sec-h"><h2>Ek açıklama</h2><span class="hint">Koşulların altına ya da yeni sayfaya basılır. Örn. “Amaç: …” veya parça gruplandırma tablosu.</span></div><div class="form">' +
+      fld('Başlık (isteğe bağlı)', '<input id="e-ekb" data-bind="ek_baslik" value="' + esc(E.ek_baslik) + '">', 'full') +
+      fld('Metin', '<textarea id="e-ekm" data-bind="ek_metin" data-auto rows="3">' + esc(E.ek_metin) + '</textarea>', 'full') +
+      '<label class="check full" for="e-ekn"><input id="e-ekn" type="checkbox" data-bind="ek_yeni_sayfa"' + (E.ek_yeni_sayfa ? ' checked' : '') + '> Yeni sayfada başlat (Fatura bilgileri ve Sipariş Teyidi ilk bölümün sonunda kalır)</label></div></section>';
+
+    var side = '<aside class="ed-side"><div class="panel stack">' +
+      '<div class="row" style="justify-content:space-between"><h3>' + (isNew ? 'Yeni teklif' : esc(E.no)) + '</h3>' + durumChip(E.durum) + '</div>' +
+      fld('Durum', '<select id="e-durum" data-bind="durum">' + Object.keys(DURUM).map(function (d) { return '<option value="' + d + '"' + (E.durum === d ? ' selected' : '') + '>' + DURUM[d][1] + '</option>'; }).join('') + '</select>') +
+      fld('Tarih', '<input id="e-tarih" type="date" data-bind="tarih" value="' + esc(E.tarih) + '">') +
+      fld('Hazırlayan (PDF’te Gönderen)', '<select id="e-gon" data-act-change="hazirlayan">' + hzOptions(E) + '</select>') +
+      '<div class="totals" id="ed-totals">' + totalsHtml(E) + '</div>' +
+      '<button class="btn primary block" type="button" data-act="e-save">' + (isNew ? 'Teklifi kaydet' : 'Değişiklikleri kaydet') + '</button>' +
+      '<div class="row"><button class="btn" style="flex:1" type="button" data-act="e-pdf">PDF önizle</button><button class="btn" style="flex:1" type="button" data-act="e-pdf" data-dl="1">PDF indir</button></div>' +
+      '</div><div class="panel stack">' +
+      '<button class="btn" type="button" data-act="e-sablon-kaydet">Koşulları şablon olarak kaydet</button>' +
+      (isNew ? '' : '<button class="btn" type="button" data-act="e-kopya">Kopyasını oluştur</button>') +
+      (!isNew && E.durum === 'onaylandi' && can('rego_fatura') ? '<button class="btn" type="button" data-act="e-faturala">Fatura kaydı oluştur</button>' : '') +
+      (!isNew && (E.durum === 'onaylandi' || E.durum === 'faturalandi') && can('rego_proje_edit') ? '<button class="btn" type="button" data-act="e-proje">Proje aç</button>' : '') +
+      (!isNew && can('rego_sil') ? '<button class="btn danger" type="button" data-act="e-sil">Teklifi sil</button>' : '') +
+      '<a class="btn ghost" href="#teklif">← Tekliflere dön</a></div></aside>';
+
+    return dl + '<div class="head"><div><h1>' + (isNew ? 'Yeni fiyat teklifi' : esc(E.firma || 'Teklif')) + '</h1><p class="sub">' + (isNew ? 'Firma, kalemler ve koşulları girin; PDF hazır formatta çıkar.' : esc(E.no) + ' · ' + fmtD(E.tarih)) + '</p></div></div>' +
+      '<div class="ed" data-root="E"><div class="stack" style="gap:16px">' + musteri + items + kos + ek + '</div>' + side + '</div>';
+  }
+  function hzOptions(E) {
+    var hs = hazirlayanlar().slice();
+    if (!E.gonderen_ad) { var u = user(E.gonderen_id); if (u) { E.gonderen_ad = displayName(u); E.gonderen_email = u.email; E.gonderen_tel = u.tel; } }
+    if (E.gonderen_ad && !hs.some(function (h) { return h.ad === E.gonderen_ad; })) hs.push({ ad: E.gonderen_ad, email: E.gonderen_email, tel: E.gonderen_tel });
+    return hs.map(function (h, i) { return '<option value="' + esc(h.ad) + '"' + (h.ad === E.gonderen_ad ? ' selected' : '') + '>' + esc(h.ad) + '</option>'; }).join('');
+  }
+  function fld(label, control, cls) {
+    var id = (control.match(/id="([^"]+)"/) || [])[1] || '';
+    return '<label class="f' + (cls ? ' ' + cls : '') + '"' + (id ? ' for="' + id + '"' : '') + '>' + esc(label) + control + '</label>';
+  }
+  function kosEditor(F, root) {
+    return '<div class="kos">' + (F.kosullar || []).map(function (k, i) {
+      return '<div class="ko"><div class="c-b"><input class="inp" id="' + root + 'ko' + i + 'b" data-bind="kosullar.' + i + '.baslik" list="dl-kos" value="' + esc(k.baslik) + '" placeholder="Başlık" aria-label="Koşul başlığı"></div>' +
+        '<div class="c-m"><textarea class="inp" id="' + root + 'ko' + i + 'm" data-bind="kosullar.' + i + '.metin" data-auto rows="2" aria-label="Koşul metni">' + esc(k.metin) + '</textarea></div>' +
+        '<div class="ctl"><button class="icon-btn" type="button" data-act="kos-up" data-i="' + i + '" aria-label="Yukarı taşı" title="Yukarı taşı">↑</button><button class="icon-btn" type="button" data-act="kos-down" data-i="' + i + '" aria-label="Aşağı taşı" title="Aşağı taşı">↓</button><button class="icon-btn x" type="button" data-act="kos-del" data-i="' + i + '" aria-label="Koşulu sil" title="Koşulu sil">×</button></div></div>';
+    }).join('') + '</div>' +
+      '<div class="row" style="margin-top:10px;justify-content:space-between"><button class="btn sm" type="button" data-act="kos-add">+ Koşul ekle</button>' +
+      '<span class="hint">Madde: <code>- metin</code> · Alt madde: <code>  - metin</code> · Kalın: <code>**metin**</code> · Bağlantı: <code>[buradan](https://…)</code> · Tablo: <code>| A | B |</code></span></div>';
+  }
+  function totalsHtml(E) {
+    var o = {};
+    E.kalemler.forEach(function (k) { o[k.para] = (o[k.para] || 0) + (Number(k.miktar) || 0) * (Number(k.fiyat) || 0); });
+    var ks = PARA.filter(function (p) { return o[p]; });
+    if (!ks.length) return '<div class="muted small">Kalem fiyatı girildiğinde toplam burada görünür.</div>';
+    return ks.map(function (p) {
+      return '<div><span>Ara toplam</span><b>' + esc(money(o[p], p)) + '</b></div><div class="muted"><span>KDV %20</span><span>' + esc(money(o[p] * 0.2, p)) + '</span></div><div class="g"><span>Genel toplam</span><span>' + esc(money(o[p] * 1.2, p)) + '</span></div>';
+    }).join('');
+  }
+  AFTER.teklif = function () {
+    if (!st.id) return;
+    var f = $('#e-firma'); if (f && !f.value) f.focus();
+  };
+
+  function onEditorInput(el) {
+    var E = st.forms.E; if (!E) return;
+    var p = el.dataset.bind;
+    if (p === 'firma') {
+      var m = list('musteri').find(function (x) { return lc(x.firma) === lc(el.value.trim()); });
+      E.musteri_id = m ? m.id : 0;
+      if (m) {
+        if (!E.kisi) { E.kisi = m.kisi || ''; $('#e-kisi').value = E.kisi; }
+        if (!E.kisi_email) { E.kisi_email = m.email || ''; $('#e-mail').value = E.kisi_email; }
+        if (!E.kisi_tel) { E.kisi_tel = m.tel || ''; $('#e-tel').value = E.kisi_tel; }
+        if (m.hitap) { E._tip = m.hitap; $('#e-tip').value = m.hitap; }
+      }
+    }
+    if (p === 'hitap') E._hitapManual = el.value.trim() !== '' && el.value !== autoHitap(E);
+    if ((p === 'kisi' || p === '_tip' || p === 'firma') && !E._hitapManual) { E.hitap = autoHitap(E); $('#e-hitap').value = E.hitap; }
+    if (/^kalemler\./.test(p)) {
+      var i = +p.split('.')[1], k = E.kalemler[i];
+      var t = $('[data-tot="' + i + '"]'); if (t) t.textContent = money((k.miktar || 0) * (k.fiyat || 0), k.para);
+      $('#ed-totals').innerHTML = totalsHtml(E);
+    }
+  }
+
+  function editorPayload(E) {
+    var o = {};
+    ['musteri_id', 'firma', 'kisi', 'kisi_email', 'kisi_tel', 'hitap', 'tarih', 'gonderen_id', 'gonderen_ad', 'gonderen_email', 'gonderen_tel', 'durum', 'kalemler', 'kosullar', 'ek_baslik', 'ek_metin', 'ek_yeni_sayfa', 'toplam_goster'].forEach(function (k) { o[k] = E[k]; });
+    if (!o.hitap) o.hitap = autoHitap(E);
+    return o;
+  }
+  function saveEditor() {
+    var E = st.forms.E;
+    if (!E.firma.trim()) { toast('Firma adını girin.', true); $('#e-firma').focus(); return Promise.reject(new Error('skip')); }
+    if (!E.kalemler.some(function (k) { return String(k.ad).trim(); })) { toast('En az bir ürün veya hizmet girin.', true); return Promise.reject(new Error('skip')); }
+    var path = E.id ? 'teklif/' + E.id : 'teklif';
+    return api(path, E.id ? 'PUT' : 'POST', editorPayload(E)).then(function (r) {
+      upsert('teklif', r.item);
+      if (r.musteri) upsert('musteri', r.musteri);
+      var wasNew = !E.id;
+      var tip = E._tip;
+      st.forms.E = clone(r.item); st.forms.E._tip = tip; st.forms.E._hitapManual = E._hitapManual;
+      st.dirty = false;
+      if (wasNew) { history.replaceState(null, '', '#teklif/' + r.item.id); st.id = String(r.item.id); }
+      render();
+      return r.item;
+    });
+  }
+
+  function faturaBody() {
+    var tab = st.tab.fatura || 'acik';
+    var all = list('fatura').filter(function (f) { return match([f.no, firma(f.musteri_id)].join(' ')); });
+    var t = today();
+    var groups = {
+      acik: all.filter(function (f) { return !f.odendi; }),
+      gec: all.filter(function (f) { return !f.odendi && f.vade && f.vade < t; }),
+      odendi: all.filter(function (f) { return f.odendi; }),
+      tum: all
+    };
+    var rows = groups[tab].slice().sort(function (a, b) { return tab === 'odendi' ? String(b.odeme_tarihi || b.tarih).localeCompare(String(a.odeme_tarihi || a.tarih)) : String(a.vade || a.tarih).localeCompare(String(b.vade || b.tarih)); });
+    var tabs = [['acik', 'Açık'], ['gec', 'Gecikmiş'], ['odendi', 'Ödendi'], ['tum', 'Tümü']];
+    var ay = t.slice(0, 7);
+    return '' +
+      '<div class="tabs" role="tablist">' + tabs.map(function (x) { return '<button class="tab" role="tab" type="button" data-act="tab" data-k="fatura" data-v="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">' + x[1] + ' (' + groups[x[0]].length + ')</button>'; }).join('') + '</div>' +
+      '<section class="panel"><div class="tablewrap"><table class="t"><thead><tr><th>Fatura no</th><th>Müşteri</th><th>Teklif</th><th>Düzenleme</th><th>Vade</th><th>Durum</th><th class="r">Tutar (KDV dahil)</th><th></th></tr></thead><tbody>' +
+      (rows.map(function (f) {
+        var tk = f.teklif_id ? byId('teklif', f.teklif_id) : null;
+        return '<tr class="click" data-act="fatura-edit" data-id="' + f.id + '"><td class="mono">' + esc(f.no || '—') + '</td><td class="strong">' + esc(firma(f.musteri_id)) + '</td><td>' + (tk ? '<a href="#teklif/' + tk.id + '" data-stop="1">' + esc(tk.no) + '</a>' : '—') + '</td><td class="num">' + fmtD(f.tarih) + '</td><td class="num">' + fmtD(f.vade) + '</td><td>' + invState(f) + '</td><td class="r num strong">' + esc(money(f.tutar, f.para)) + '</td>' +
+          '<td class="r">' + (f.odendi ? '<span class="small muted">' + fmtD(f.odeme_tarihi) + '</span>' : '<button class="btn sm" type="button" data-act="fatura-ode" data-id="' + f.id + '">Tahsil edildi</button>') + '</td></tr>';
+      }).join('') || emptyRow(8, 'Bu listede fatura yok.', tab === 'acik' ? ' Onaylanan tekliften “Fatura kaydı oluştur” ile ekleyebilirsiniz.' : '')) +
+      '</tbody></table></div></section>';
+  }
+
+  function sumAy(rows, key) { var ay = today().slice(0, 7); return rows.filter(function (x) { return String(x[key] || '').indexOf(ay) === 0; }); }
+  function hv(h) { return { para: h.para, v: Number(h.tutar) }; }
+  function yaklasanOdemeler() {
+    var lim = addDays(today(), 30);
+    return list('hareket').filter(function (h) { return h.tur === 'gider' && h.durum === 'bekliyor' && h.tarih <= lim; })
+      .sort(function (x, y) { return x.tarih.localeCompare(y.tarih); });
+  }
+  function hareketState(h) {
+    if (h.durum === 'odendi') return chip('ok', h.tur === 'gelir' ? 'Alındı' : 'Ödendi');
+    if (h.tarih < today()) return chip('bad', 'Gecikmiş');
+    var g = Math.round((dt(h.tarih) - dt(today())) / 864e5);
+    return chip('warn', g === 0 ? 'Bugün' : g === 1 ? 'Yarın' : g + ' gün sonra');
+  }
+  function odemeLi(h) {
+    var d = dt(h.tarih);
+    return '<div class="li"><div class="date"><b>' + d.getDate() + '</b><small>' + AY[d.getMonth()] + '</small></div>' +
+      '<div style="min-width:0"><div class="t">' + esc(h.aciklama || h.kategori) + '</div><div class="m">' + esc([h.kategori, h.hesap, h.tekrar === 'aylik' ? 'Her ay' : h.tekrar === 'yillik' ? 'Her yıl' : ''].filter(Boolean).join(' · ')) + '</div></div>' +
+      '<div class="r"><div class="strong num">' + esc(money(h.tutar, h.para)) + '</div><div class="row" style="justify-content:flex-end;margin-top:4px">' + hareketState(h) + '<button class="btn sm" type="button" data-act="hareket-ode" data-id="' + h.id + '">Ödendi</button></div></div></div>';
+  }
+
+  VIEWS.fatura = function () {
+    var fat = canFat(), kasa = canKasa();
+    var sec = st.tab.finans || (kasa ? 'kasa' : 'fatura');
+    if (!kasa) sec = 'fatura'; if (!fat) sec = 'kasa';
+    var t = today();
+    var H = list('hareket'), F = list('fatura');
+    var gelen = sumBy(sumAy(F.filter(function (f) { return f.odendi; }), 'odeme_tarihi').map(fv).concat(sumAy(H.filter(function (h) { return h.tur === 'gelir' && h.durum === 'odendi'; }), 'odeme_tarihi').map(hv)));
+    var giden = sumBy(sumAy(H.filter(function (h) { return h.tur === 'gider' && h.durum === 'odendi'; }), 'odeme_tarihi').map(hv));
+    var yak = yaklasanOdemeler(), gecO = yak.filter(function (h) { return h.tarih < t; });
+    var acik = F.filter(function (f) { return !f.odendi; });
+    var btns = (fat ? '<button class="btn" type="button" data-act="fatura-new">+ Fatura kaydı</button>' : '') +
+      (kasa ? '<button class="btn" type="button" data-act="hareket-new" data-tur="gelir">+ Gelir (faturasız)</button><button class="btn primary" type="button" data-act="hareket-new" data-tur="gider">+ Gider / ödeme</button>' : '');
+    var sums = '<section class="panel"><div class="sums">' +
+      '<div><span class="lab">Bu ay gelen</span><b class="num" style="color:var(--ok)">' + esc(sumTxt(gelen)) + '</b></div>' +
+      (kasa ? '<div><span class="lab">Bu ay ödenen</span><b class="num">' + esc(sumTxt(giden)) + '</b></div>' : '') +
+      (fat ? '<div><span class="lab">Bekleyen tahsilat</span><b class="num">' + esc(sumTxt(sumBy(acik.map(fv)))) + '</b></div>' : '') +
+      (kasa ? '<div><span class="lab">Yaklaşan ödemeler (30 gün)</span><b class="num"' + (gecO.length ? ' style="color:var(--bad)"' : '') + '>' + esc(sumTxt(sumBy(yak.map(hv)))) + '</b>' + (gecO.length ? '<span class="small" style="color:var(--bad)">' + gecO.length + ' gecikmiş ödeme</span>' : '') + '</div>' : '') +
+      '</div></section>';
+    var sw = fat && kasa ? '<div class="seg" role="tablist" style="width:max-content"><button type="button" role="tab" data-act="tab" data-k="finans" data-v="fatura" aria-pressed="' + (sec === 'fatura') + '">Faturalar</button><button type="button" role="tab" data-act="tab" data-k="finans" data-v="kasa" aria-pressed="' + (sec === 'kasa') + '">Gelir ve giderler</button></div>' : '';
+    return '<div class="head"><div><h1>Finans</h1><p class="sub">' + (kasa ? 'Faturalı tahsilatlar, faturasız ödemeler ve kira gibi giderler. ' : '') + 'e-Fatura ayrı sisteminizden kesilir.</p></div><div class="row">' + btns + '</div></div>' +
+      sums + sw + (sec === 'kasa' ? kasaBody() : faturaBody());
+  };
+
+  function kasaBody() {
+    var tab = st.tab.kasa || 'tum';
+    var all = list('hareket').filter(function (h) { return match([h.aciklama, h.kategori, h.hesap, firma(h.musteri_id)].join(' ')); });
+    var groups = {
+      tum: all,
+      bekleyen: all.filter(function (h) { return h.durum === 'bekliyor'; }),
+      gelir: all.filter(function (h) { return h.tur === 'gelir'; }),
+      gider: all.filter(function (h) { return h.tur === 'gider'; })
+    };
+    var rows = groups[tab].slice().sort(function (x, y) { return tab === 'bekleyen' ? x.tarih.localeCompare(y.tarih) : y.tarih.localeCompare(x.tarih) || y.id - x.id; });
+    var tabs = [['tum', 'Tümü'], ['bekleyen', 'Bekleyen'], ['gelir', 'Gelirler'], ['gider', 'Giderler']];
+    return '<div class="tabs" role="tablist">' + tabs.map(function (x) { return '<button class="tab" role="tab" type="button" data-act="tab" data-k="kasa" data-v="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">' + x[1] + ' (' + groups[x[0]].length + ')</button>'; }).join('') + '</div>' +
+      '<section class="panel"><div class="tablewrap"><table class="t"><thead><tr><th>Tarih</th><th>Açıklama</th><th>Müşteri</th><th>Ödeme şekli</th><th>Durum</th><th class="r">Tutar</th><th></th></tr></thead><tbody>' +
+      (rows.map(function (h) {
+        var g = h.tur === 'gelir';
+        return '<tr class="click" data-act="hareket-edit" data-id="' + h.id + '"><td class="num">' + fmtD(h.tarih) + '</td>' +
+          '<td><div class="strong">' + esc(h.aciklama || h.kategori || '—') + '</div><div class="small muted">' + esc([g ? 'Gelir' : 'Gider', h.kategori].filter(Boolean).join(' · ')) + (h.tekrar !== 'yok' ? ' · <span class="svc">' + (h.tekrar === 'aylik' ? 'Her ay' : 'Her yıl') + '</span>' : '') + '</div></td>' +
+          '<td>' + esc(h.musteri_id ? firma(h.musteri_id) : '—') + '</td><td>' + esc(h.hesap || '—') + '</td><td>' + hareketState(h) + '</td>' +
+          '<td class="r num strong" style="color:' + (g ? 'var(--ok)' : 'var(--fg)') + '">' + (g ? '+' : '−') + ' ' + esc(money(h.tutar, h.para)) + '</td>' +
+          '<td class="r">' + (h.durum === 'bekliyor' ? '<button class="btn sm" type="button" data-act="hareket-ode" data-id="' + h.id + '">' + (g ? 'Alındı' : 'Ödendi') + '</button>' : '') + '</td></tr>';
+      }).join('') || emptyRow(7, 'Bu listede kayıt yok.', ' Faturasız gelen ödemeleri ve kira gibi giderleri yukarıdaki düğmelerle ekleyin.')) +
+      '</tbody></table></div></section>';
+  }
+
+  VIEWS.saha = function () {
+    var L = list('saha').filter(function (s) { return match([s.is_tanimi, s.konum, s.ekip, firma(s.musteri_id)].join(' ')); });
+    var up = L.filter(function (s) { return s.tarih >= today() && s.durum !== 'tamamlandi' && s.durum !== 'iptal'; }).sort(function (a, b) { return (a.tarih + a.saat).localeCompare(b.tarih + b.saat); });
+    var past = L.filter(function (s) { return up.indexOf(s) < 0; }).sort(function (a, b) { return (b.tarih + b.saat).localeCompare(a.tarih + a.saat); }).slice(0, 15);
+    var ed = can('rego_saha_edit');
+    if (!st.cal) { var n = new Date(); st.cal = [n.getFullYear(), n.getMonth()]; }
+    function li(s) {
+      var d = dt(s.tarih), done = s.durum === 'tamamlandi', iptal = s.durum === 'iptal';
+      return '<div class="li sli"><div class="date"><b>' + d.getDate() + '</b><small>' + AY[d.getMonth()] + '</small></div>' +
+        '<div style="min-width:0"><div class="t">' + esc(s.is_tanimi) + (done ? ' ' + chip('ok', 'Tamamlandı') : iptal ? ' ' + chip('mute', 'İptal') : '') + '</div>' +
+        '<div class="m">' + esc([firma(s.musteri_id) !== '—' ? firma(s.musteri_id) : '', s.konum].filter(Boolean).join(' · ')) + '</div></div>' +
+        '<div class="m sli-r"><span class="mono">' + esc(s.saat || '') + '</span><br>' + esc(s.ekip || '') + '</div>' +
+        (ed ? '<div class="sli-a">' + (!done && !iptal ? '<button class="btn sm" type="button" data-act="saha-done" data-id="' + s.id + '">Tamamlandı</button>' : '') + '<button class="btn sm ghost" type="button" data-act="saha-edit" data-id="' + s.id + '">Düzenle</button></div>' : '') +
+        '</div>';
+    }
+    return '<div class="head"><div><h1>Saha randevuları</h1><p class="sub">Yerinde tarama ve ölçüm ziyaretleri</p></div>' + (ed ? '<button class="btn primary" type="button" data-act="saha-new">+ Ziyaret planla</button>' : '') + '</div>' +
+      '<section class="grid2"><div class="panel"><div class="panel-h"><h2>Yaklaşan</h2><span class="chip c-info">' + up.length + ' ziyaret</span></div><div class="list">' + (up.map(li).join('') || '<p class="empty"><b>Planlı ziyaret yok.</b>' + (ed ? '“+ Ziyaret planla” ile ekleyin.' : '') + '</p>') + '</div>' +
+      (past.length ? '<h3 style="margin:18px 0 6px">Geçmiş ve tamamlanan</h3><div class="list">' + past.map(li).join('') + '</div>' : '') + '</div>' +
+      '<div class="panel"><div class="panel-h"><h2>' + AYU[st.cal[1]] + ' ' + st.cal[0] + '</h2><div class="row"><button class="icon-btn" type="button" data-act="cal" data-d="-1" aria-label="Önceki ay">‹</button><button class="icon-btn" type="button" data-act="cal" data-d="1" aria-label="Sonraki ay">›</button></div></div>' + calendar(st.cal[0], st.cal[1]) + '</div></section>';
+  };
+
+  VIEWS.kullanici = function () {
+    var opts = [['rego_yonetici', 'Yönetici'], ['rego_satis', 'Satış'], ['rego_saha', 'Saha ekibi'], ['pasif', 'Pasif (giriş yapamaz)']];
+    return '<div class="head"><div><h1>Kullanıcılar</h1><p class="sub">Panel kullanıcıları ve yetkileri</p></div><button class="btn primary" type="button" data-act="kullanici-new">+ Kullanıcı ekle</button></div>' +
+      '<section class="panel"><div class="tablewrap"><table class="t"><thead><tr><th>Ad soyad</th><th>E-posta</th><th>Telefon</th><th>Rol</th><th></th></tr></thead><tbody>' +
+      B.users.map(function (u) {
+        var fixed = u.rol === 'administrator' || u.id === B.me.id;
+        return '<tr><td class="strong">' + esc(u.ad) + (u.id === B.me.id ? ' <span class="chip c-info">Siz</span>' : '') + '</td><td>' + esc(u.email) + '</td><td class="mono">' + esc(u.tel || '—') + '</td><td>' +
+          (fixed ? esc(ROLES[u.rol] || u.rol) : '<select class="inp" style="width:auto" data-act-change="rol" data-id="' + u.id + '" aria-label="' + esc(u.ad) + ' rolü">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (u.rol === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>') + '</td>' +
+          '<td class="r">' + (u.rol !== 'administrator' ? '<button class="btn sm" type="button" data-act="sifre-ver" data-id="' + u.id + '">Şifre ver</button>' : '') + '</td></tr>';
+      }).join('') + '</tbody></table></div></section>' +
+      '<section class="grid2 even"><div class="panel"><h2 style="margin-bottom:10px">Roller ne yapabilir?</h2><div class="list">' +
+      '<div class="li" style="grid-template-columns:110px minmax(0,1fr)"><b>Yönetici</b><span class="m">Her şey: teklif, tahsilat, proje, saha, kullanıcılar ve ayarlar, kayıt silme.</span></div>' +
+      '<div class="li" style="grid-template-columns:110px minmax(0,1fr)"><b>Satış</b><span class="m">Müşteri, teklif (PDF) ve tahsilat kayıtları. Projeleri ve sahayı görür.</span></div>' +
+      '<div class="li" style="grid-template-columns:110px minmax(0,1fr)"><b>Saha ekibi</b><span class="m">Projeleri ilerletir, saha randevularını yönetir. Fiyat ve tahsilatı görmez.</span></div>' +
+      '</div></div><div class="panel"><h2 style="margin-bottom:10px">Yeni kullanıcı nasıl giriş yapar?</h2><p class="m muted" style="margin:0">Eklerken şifre yazarsanız kişi hemen o şifreyle giriş yapar; boş bırakırsanız şifre belirleme e-postası gider. Siteniz e-posta gönderemiyorsa listeden “Şifre ver”i kullanın. Giriş adresi bu sayfanın adresidir; kullanıcı adı yerine e-posta da yazılabilir.</p></div></section>';
+  };
+
+  VIEWS.ayarlar = function () {
+    var S = st.forms.S || (st.forms.S = clone(B.settings));
+    return '<div class="head"><div><h1>Ayarlar</h1><p class="sub">Teklif formunda görünen firma bilgileri, metinler ve koşul şablonları</p></div><button class="btn primary" type="button" data-act="ayar-save">Ayarları kaydet</button></div>' +
+      '<div class="stack" style="gap:16px" data-root="S">' +
+      '<section class="panel"><div class="panel-h"><div><h2>Panel sürümü</h2><p id="upd-msg">Yüklü sürüm ' + esc(B.version) + '. Yeni sürümler kendiliğinden kurulur; hemen denetlemek için düğmeyi kullanın.</p></div><div class="row"><button class="btn sm" type="button" data-act="upd-check">Güncellemeleri denetle</button><button class="btn sm primary" type="button" data-act="upd-install" hidden id="upd-btn">Şimdi güncelle</button></div></div></section>' +
+      '<section class="panel"><h2 style="margin-bottom:14px">Fatura bilgileri (PDF alt kısmı)</h2><div class="form c3">' +
+      fld('Firma unvanı', '<input id="s-unvan" data-bind="firma_unvan" value="' + esc(S.firma_unvan) + '">') +
+      fld('Vergi no', '<input id="s-vn" data-bind="vergi_no" value="' + esc(S.vergi_no) + '">') +
+      fld('Telefon', '<input id="s-tel" data-bind="telefon" value="' + esc(S.telefon) + '">') +
+      fld('E-posta', '<input id="s-mail" data-bind="email" value="' + esc(S.email) + '">') +
+      fld('Web', '<input id="s-web" data-bind="web" value="' + esc(S.web) + '">') +
+      fld('Adres', '<textarea id="s-adres" data-bind="adres" data-auto rows="2">' + esc(S.adres) + '</textarea>') +
+      '</div></section>' +
+      '<section class="panel"><h2 style="margin-bottom:14px">Teklif formu metinleri</h2><div class="form">' +
+      fld('Form başlığı', '<input id="s-baslik" data-bind="teklif_baslik" value="' + esc(S.teklif_baslik) + '">') +
+      fld('Teklif no öneki', '<input id="s-onek" data-bind="teklif_onek" value="' + esc(S.teklif_onek) + '">') +
+      fld('Giriş metni (hitaptan sonra)', '<textarea id="s-giris" data-bind="giris_metni" data-auto rows="2">' + esc(S.giris_metni) + '</textarea>', 'full') +
+      fld('KDV notu (tablo altı)', '<input id="s-kdv" data-bind="kdv_notu" value="' + esc(S.kdv_notu) + '">', 'full') +
+      fld('Sipariş teyidi metni', '<textarea id="s-teyit" data-bind="teyit_metni" data-auto rows="2">' + esc(S.teyit_metni) + '</textarea>') +
+      fld('Sipariş teyidi alt satırı', '<input id="s-teyit2" data-bind="teyit_alt" value="' + esc(S.teyit_alt) + '">') +
+      '</div></section>' +
+      '<section class="panel"><div class="panel-h"><div><h2>Teklifi hazırlayanlar</h2><p>Teklif ekranındaki “Hazırlayan” listesi. Seçilen kişinin adı, e-postası ve telefonu PDF’te Gönderen bölümüne yazılır.</p></div><button class="btn sm" type="button" data-act="hz-add">+ Kişi ekle</button></div><div class="stack">' +
+      (S.hazirlayanlar || []).map(function (h, i) {
+        return '<div class="form c4" style="align-items:end">' +
+          fld('Ad soyad', '<input id="hz' + i + 'a" data-bind="hazirlayanlar.' + i + '.ad" value="' + esc(h.ad) + '">') +
+          fld('E-posta', '<input id="hz' + i + 'e" type="email" data-bind="hazirlayanlar.' + i + '.email" value="' + esc(h.email) + '">') +
+          fld('Telefon', '<input id="hz' + i + 't" data-bind="hazirlayanlar.' + i + '.tel" value="' + esc(h.tel) + '">') +
+          '<div><button class="btn sm ghost danger" type="button" data-act="hz-del" data-i="' + i + '">Kaldır</button></div></div>';
+      }).join('') + '</div></section>' +
+      '<section class="panel"><h2 style="margin-bottom:14px">Listeler</h2><div class="form">' +
+      fld('Birimler (virgülle ayırın)', '<input id="s-birim" data-bind="birimler" data-csv value="' + esc((S.birimler || []).join(', ')) + '">') +
+      fld('Hizmet türleri (virgülle ayırın)', '<input id="s-hizmet" data-bind="hizmetler" data-csv value="' + esc((S.hizmetler || []).join(', ')) + '">') +
+      fld('Gider kategorileri (virgülle ayırın)', '<input id="s-gider" data-bind="gider_kategorileri" data-csv value="' + esc((S.gider_kategorileri || []).join(', ')) + '">') +
+      fld('Gelir kategorileri (virgülle ayırın)', '<input id="s-gelir" data-bind="gelir_kategorileri" data-csv value="' + esc((S.gelir_kategorileri || []).join(', ')) + '">') +
+      fld('Ödeme şekilleri (virgülle ayırın)', '<input id="s-hesap" data-bind="hesaplar" data-csv value="' + esc((S.hesaplar || []).join(', ')) + '">') +
+      '</div></section>' +
+      '<section class="panel"><div class="panel-h"><div><h2>Koşul şablonları</h2><p>Teklif ekranında “Şablon seç” listesinde çıkar.</p></div><button class="btn sm" type="button" data-act="sb-new">+ Şablon ekle</button></div><div class="list">' +
+      (S.sablonlar || []).map(function (sb, i) {
+        return '<div class="li" style="grid-template-columns:minmax(0,1fr) auto"><div><div class="t">' + esc(sb.ad) + '</div><div class="m">' + esc(sb.kosullar.map(function (k) { return k.baslik; }).filter(Boolean).join(' · ')) + (sb.ek_baslik || sb.ek_metin ? ' · Ek açıklama' : '') + '</div></div><div class="row"><button class="btn sm" type="button" data-act="sb-edit" data-i="' + i + '">Düzenle</button><button class="btn sm ghost danger" type="button" data-act="sb-del" data-i="' + i + '">Sil</button></div></div>';
+      }).join('') + '</div></section></div>';
+  };
+
+  /* ---------- modals ---------- */
+  function modal(title, body, opts) {
+    opts = opts || {};
+    $('#layer').innerHTML = '<div class="scrim" id="mscrim"><form class="modal' + (opts.wide ? ' wide' : '') + '" id="mform" novalidate aria-label="' + esc(title) + '"' + (opts.root ? ' data-root="' + opts.root + '"' : '') + '><h2>' + esc(title) + '</h2>' + body +
+      '<div id="mconfirm"></div><div class="modal-f"><div>' + (opts.del ? '<button type="button" class="btn danger" data-act="m-del">Sil</button>' : '') + '</div><div class="row"><button type="button" class="btn" data-act="m-close">Vazgeç</button><button class="btn primary" type="submit">' + esc(opts.ok || 'Kaydet') + '</button></div></div></form></div>';
+    var form = $('#mform');
+    form.onsubmit = function (e) {
+      e.preventDefault();
+      var btn = form.querySelector('[type=submit]'); btn.disabled = true;
+      Promise.resolve(opts.submit(form)).then(function (ok) { if (ok !== false) closeModal(); else btn.disabled = false; }).catch(function (err) { btn.disabled = false; fail(err); });
+    };
+    st.modalDel = opts.del || null;
+    $$('textarea[data-auto]', form).forEach(autosize);
+    setTimeout(function () { var f = form.querySelector('input:not([type=hidden]),select,textarea'); if (f) f.focus(); }, 0);
+  }
+  function closeModal() { $('#layer').innerHTML = ''; st.modalDel = null; }
+  function val(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+  function opt(listArr, sel, emptyLabel) {
+    return (emptyLabel != null ? '<option value="0">' + esc(emptyLabel) + '</option>' : '') + listArr.map(function (x) { return '<option value="' + x[0] + '"' + (String(x[0]) === String(sel) ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('');
+  }
+  function musteriOpts(sel, empty) { return opt(list('musteri').map(function (m) { return [m.id, m.firma]; }), sel, empty); }
+
+  function musteriModal(m) {
+    var ed = can('rego_musteri_edit');
+    m = m || { firma: '', kisi: '', hitap: 'Bey', email: '', tel: '', sehir: '', sektor: '', notlar: '' };
+    var extra = '';
+    if (m.id) {
+      var ts = list('teklif').filter(function (t) { return t.musteri_id === m.id; }).slice(0, 5);
+      var ps = list('proje').filter(function (p) { return p.musteri_id === m.id; }).slice(0, 5);
+      extra = '<div class="grid2 even" style="gap:12px">' +
+        (can('rego_teklif') ? '<div><h3 style="margin-bottom:6px">Teklifler</h3><div class="list">' + (ts.map(function (t) { return '<div class="li" style="grid-template-columns:minmax(0,1fr) auto;padding:6px 0"><a href="#teklif/' + t.id + '" data-act="m-close">' + esc(t.no) + '</a><span class="small">' + esc(teklifTop(t)) + '</span></div>'; }).join('') || '<span class="small muted">Teklif yok.</span>') + '</div></div>' : '') +
+        '<div><h3 style="margin-bottom:6px">Projeler</h3><div class="list">' + (ps.map(function (p) { return '<div class="li" style="grid-template-columns:minmax(0,1fr) auto;padding:6px 0"><span class="small">' + esc(p.ad) + '</span>' + stageChip(p.asama) + '</div>'; }).join('') || '<span class="small muted">Proje yok.</span>') + '</div></div></div>';
+    }
+    var dis = ed ? '' : ' disabled';
+    modal(m.id ? m.firma : 'Yeni müşteri',
+      '<div class="form">' +
+      fld('Firma adı', '<input id="m-firma" required value="' + esc(m.firma) + '"' + dis + '>', 'full') +
+      fld('İlgili kişi', '<input id="m-kisi" value="' + esc(m.kisi) + '"' + dis + '>') +
+      fld('Hitap', '<select id="m-hitap"' + dis + '><option' + (m.hitap !== 'Hanım' ? ' selected' : '') + '>Bey</option><option' + (m.hitap === 'Hanım' ? ' selected' : '') + '>Hanım</option></select>') +
+      fld('E-posta', '<input id="m-email" type="email" value="' + esc(m.email) + '"' + dis + '>') +
+      fld('Telefon', '<input id="m-tel" type="tel" value="' + esc(m.tel) + '"' + dis + '>') +
+      fld('Şehir', '<input id="m-sehir" value="' + esc(m.sehir) + '"' + dis + '>') +
+      fld('Sektör', '<input id="m-sektor" value="' + esc(m.sektor) + '" placeholder="Otomotiv, kalıp, savunma…"' + dis + '>') +
+      fld('Notlar', '<textarea id="m-not" data-auto rows="2"' + dis + '>' + esc(m.notlar || '') + '</textarea>', 'full') + '</div>' + extra,
+      {
+        ok: ed ? 'Kaydet' : 'Kapat',
+        del: m.id && can('rego_sil') ? function () { return api('musteri/' + m.id, 'DELETE').then(function () { drop('musteri', m.id); toast('Müşteri silindi'); render(); }); } : null,
+        submit: function () {
+          if (!ed) return true;
+          if (!val('m-firma')) { toast('Firma adını girin.', true); return false; }
+          return api(m.id ? 'musteri/' + m.id : 'musteri', m.id ? 'PUT' : 'POST', { firma: val('m-firma'), kisi: val('m-kisi'), hitap: val('m-hitap'), email: val('m-email'), tel: val('m-tel'), sehir: val('m-sehir'), sektor: val('m-sektor'), notlar: val('m-not') })
+            .then(function (r) { upsert('musteri', r.item); toast(m.id ? 'Müşteri güncellendi' : 'Müşteri eklendi'); render(); });
+        }
+      });
+  }
+
+  function projeModal(p) {
+    var s = B.settings;
+    p = p || { ad: '', musteri_id: 0, hizmet: (s.hizmetler || [])[0] || '', asama: 'onay', teslim: addDays(today(), 14), notlar: '', teklif_id: 0 };
+    var full = can('rego_finans') || can('rego_ayarlar') || !p.id;
+    var dis = full ? '' : ' disabled';
+    modal(p.id ? p.kod + ' · ' + p.ad : 'Yeni proje',
+      '<div class="form">' +
+      fld('Proje adı', '<input id="p-isim" required value="' + esc(p.ad) + '"' + dis + '>', 'full') +
+      fld('Müşteri', '<select id="p-mus"' + dis + '>' + musteriOpts(p.musteri_id, 'Müşteri seçin') + '</select>') +
+      fld('Hizmet', '<select id="p-svc"' + dis + '>' + opt((s.hizmetler || []).map(function (h) { return [h, h]; }), p.hizmet) + '</select>') +
+      fld('Aşama', '<select id="p-asama">' + opt(STAGES, p.asama) + '</select>') +
+      fld('Teslim tarihi', '<input id="p-tes" type="date" value="' + esc(p.teslim || '') + '"' + dis + '>') +
+      fld('Not', '<textarea id="p-not" data-auto rows="2" placeholder="Hassasiyet, çıktı formatı…">' + esc(p.notlar || '') + '</textarea>', 'full') + '</div>',
+      {
+        del: p.id && can('rego_sil') ? function () { return api('proje/' + p.id, 'DELETE').then(function () { drop('proje', p.id); toast('Proje silindi'); render(); }); } : null,
+        submit: function () {
+          if (!val('p-isim')) { toast('Proje adını girin.', true); return false; }
+          var body = { ad: val('p-isim'), musteri_id: +val('p-mus'), hizmet: val('p-svc'), asama: val('p-asama'), teslim: val('p-tes'), notlar: val('p-not'), teklif_id: p.teklif_id || 0 };
+          return api(p.id ? 'proje/' + p.id : 'proje', p.id ? 'PUT' : 'POST', body).then(function (r) { upsert('proje', r.item); toast(p.id ? 'Proje güncellendi' : 'Proje açıldı: ' + r.item.kod); if (!p.id && st.view === 'teklif') go('proje'); else render(); });
+        }
+      });
+  }
+
+  function sahaModal(s) {
+    s = s || { tarih: addDays(today(), 3), saat: '09:00', musteri_id: 0, proje_id: 0, konum: '', is_tanimi: '', ekip: '', durum: 'planli' };
+    var projeler = list('proje').filter(function (p) { return p.asama !== 'teslim' || p.id === s.proje_id; });
+    modal(s.id ? 'Saha ziyareti' : 'Saha ziyareti planla',
+      '<div class="form">' +
+      fld('Yapılacak iş', '<input id="s-is" required value="' + esc(s.is_tanimi) + '" placeholder="Kalıp göz taraması">', 'full') +
+      fld('Müşteri', '<select id="s-mus">' + musteriOpts(s.musteri_id, 'Müşteri seçin') + '</select>') +
+      fld('Proje (isteğe bağlı)', '<select id="s-pro">' + opt(projeler.map(function (p) { return [p.id, p.kod + ' · ' + p.ad]; }), s.proje_id, 'Proje yok') + '</select>') +
+      fld('Konum', '<input id="s-konum" value="' + esc(s.konum) + '" placeholder="İl / ilçe">') +
+      fld('Ekip', '<input id="s-ekip" value="' + esc(s.ekip) + '" list="dl-ekip" placeholder="Ad, ad"><datalist id="dl-ekip">' + B.users.map(function (u) { return '<option value="' + esc(u.ad) + '">'; }).join('') + '</datalist>') +
+      fld('Tarih', '<input id="s-tarih" type="date" required value="' + esc(s.tarih) + '">') +
+      fld('Saat', '<input id="s-saat" type="time" value="' + esc(s.saat) + '">') +
+      fld('Durum', '<select id="s-durum">' + opt([['planli', 'Planlı'], ['tamamlandi', 'Tamamlandı'], ['iptal', 'İptal']], s.durum) + '</select>') + '</div>',
+      {
+        del: s.id && can('rego_sil') ? function () { return api('saha/' + s.id, 'DELETE').then(function () { drop('saha', s.id); toast('Ziyaret silindi'); render(); }); } : null,
+        submit: function () {
+          if (!val('s-is') || !val('s-tarih')) { toast('İş tanımı ve tarih gerekli.', true); return false; }
+          var body = { is_tanimi: val('s-is'), musteri_id: +val('s-mus'), proje_id: +val('s-pro'), konum: val('s-konum'), ekip: val('s-ekip'), tarih: val('s-tarih'), saat: val('s-saat'), durum: val('s-durum') };
+          return api(s.id ? 'saha/' + s.id : 'saha', s.id ? 'PUT' : 'POST', body).then(function (r) { upsert('saha', r.item); toast(s.id ? 'Ziyaret güncellendi' : 'Ziyaret planlandı'); render(); });
+        }
+      });
+  }
+
+  function faturaModal(f) {
+    f = f || { no: '', musteri_id: 0, teklif_id: 0, tarih: today(), vade: addDays(today(), 15), tutar: '', para: '₺', odendi: 0, odeme_tarihi: '', notlar: '' };
+    modal(f.id ? 'Fatura kaydı' : 'Yeni fatura kaydı',
+      '<div class="form">' +
+      fld('Müşteri', '<select id="f-mus" required>' + musteriOpts(f.musteri_id, 'Müşteri seçin') + '</select>') +
+      fld('Fatura no (e-Fatura)', '<input id="f-no" value="' + esc(f.no) + '" placeholder="RGF2026000000064">') +
+      fld('Tutar (KDV dahil)', '<input id="f-tutar" inputmode="decimal" required value="' + esc(f.tutar !== '' ? num(f.tutar) : '') + '">') +
+      fld('Para birimi', '<select id="f-para">' + opt(PARA.map(function (p) { return [p, p]; }), f.para) + '</select>') +
+      fld('Düzenleme tarihi', '<input id="f-tarih" type="date" value="' + esc(f.tarih) + '">') +
+      fld('Vade', '<input id="f-vade" type="date" value="' + esc(f.vade || '') + '">') +
+      '<label class="check" for="f-odendi"><input id="f-odendi" type="checkbox"' + (f.odendi ? ' checked' : '') + '> Ödendi</label>' +
+      fld('Ödeme tarihi', '<input id="f-odt" type="date" value="' + esc(f.odeme_tarihi || '') + '">') +
+      fld('Not', '<textarea id="f-not" data-auto rows="2">' + esc(f.notlar || '') + '</textarea>', 'full') + '</div>',
+      {
+        del: f.id && can('rego_sil') ? function () { return api('fatura/' + f.id, 'DELETE').then(function () { drop('fatura', f.id); toast('Fatura kaydı silindi'); render(); }); } : null,
+        submit: function () {
+          if (!+val('f-mus')) { toast('Müşteri seçin.', true); return false; }
+          var od = $('#f-odendi').checked;
+          var body = { musteri_id: +val('f-mus'), no: val('f-no'), tutar: parseNum(val('f-tutar')), para: val('f-para'), tarih: val('f-tarih'), vade: val('f-vade'), odendi: od, odeme_tarihi: od ? (val('f-odt') || today()) : '', notlar: val('f-not'), teklif_id: f.teklif_id || 0 };
+          return api(f.id ? 'fatura/' + f.id : 'fatura', f.id ? 'PUT' : 'POST', body).then(function (r) { upsert('fatura', r.item); toast(f.id ? 'Fatura kaydı güncellendi' : 'Fatura kaydı eklendi'); render(); });
+        }
+      });
+  }
+
+  function hareketModal(tur, h) {
+    var s = B.settings;
+    var gelir = (h ? h.tur : tur) === 'gelir';
+    var isNew = !h;
+    h = h || { tur: tur, aciklama: '', kategori: gelir ? 'Hizmet bedeli' : '', tutar: '', para: '₺', tarih: today(), durum: gelir ? 'odendi' : 'odendi', hesap: (s.hesaplar || [])[0] || 'Banka', musteri_id: 0, tekrar: 'yok', notlar: '' };
+    var kats = gelir ? (s.gelir_kategorileri || []) : (s.gider_kategorileri || []);
+    var durumOpts = gelir ? [['odendi', 'Hesaba geçti'], ['bekliyor', 'Bekleniyor']] : [['odendi', 'Ödendi'], ['bekliyor', 'Ödenecek']];
+    modal(isNew ? (gelir ? 'Gelir ekle (faturasız ödeme)' : 'Gider / ödeme ekle') : (gelir ? 'Gelir kaydı' : 'Gider kaydı'),
+      '<datalist id="dl-kat">' + kats.map(function (k) { return '<option value="' + esc(k) + '">'; }).join('') + '</datalist><div class="form">' +
+      fld('Açıklama', '<input id="h-acik" value="' + esc(h.aciklama) + '" placeholder="' + (gelir ? 'Örn. Altan Mekatronik – yerinde tarama' : 'Örn. Ekim kirası') + '">', 'full') +
+      fld('Tutar', '<input id="h-tutar" inputmode="decimal" required value="' + esc(h.tutar !== '' ? num(h.tutar) : '') + '">') +
+      fld('Para birimi', '<select id="h-para">' + opt(PARA.map(function (x) { return [x, x]; }), h.para) + '</select>') +
+      fld('Kategori', '<input id="h-kat" list="dl-kat" value="' + esc(h.kategori) + '" placeholder="Listeden seçin ya da yazın">') +
+      fld(gelir ? 'Tarih' : 'Ödeme tarihi / son gün', '<input id="h-tarih" type="date" required value="' + esc(h.tarih) + '">') +
+      fld('Durum', '<select id="h-durum">' + opt(durumOpts, h.durum) + '</select>') +
+      fld('Ödeme şekli', '<select id="h-hesap">' + opt((s.hesaplar || []).concat(h.hesap && (s.hesaplar || []).indexOf(h.hesap) < 0 ? [h.hesap] : []).map(function (x) { return [x, x]; }), h.hesap) + '</select>') +
+      (gelir ? fld('Müşteri (isteğe bağlı)', '<select id="h-mus">' + musteriOpts(h.musteri_id, 'Müşteri yok') + '</select>') : '') +
+      fld('Tekrar', '<select id="h-tekrar">' + opt([['yok', 'Tekrarlamaz'], ['aylik', 'Her ay'], ['yillik', 'Her yıl']], h.tekrar) + '</select>') +
+      '<p class="hint full" style="margin:-4px 0 0">Tekrarlayan kayıt ödendi olarak işaretlenince bir sonraki dönemin ödemesi kendiliğinden eklenir.</p>' +
+      fld('Not', '<textarea id="h-not" data-auto rows="2">' + esc(h.notlar || '') + '</textarea>', 'full') + '</div>',
+      {
+        del: !isNew && can('rego_sil') ? function () { return api('hareket/' + h.id, 'DELETE').then(function () { drop('hareket', h.id); toast('Kayıt silindi'); render(); }); } : null,
+        submit: function () {
+          var tutar = parseNum(val('h-tutar'));
+          if (!(tutar > 0)) { toast('Tutarı girin.', true); return false; }
+          if (!val('h-acik') && !val('h-kat')) { toast('Açıklama ya da kategori girin.', true); return false; }
+          var body = { tur: gelir ? 'gelir' : 'gider', aciklama: val('h-acik'), tutar: tutar, para: val('h-para'), kategori: val('h-kat'), tarih: val('h-tarih'), durum: val('h-durum'), hesap: val('h-hesap'), musteri_id: gelir ? +val('h-mus') : 0, tekrar: val('h-tekrar'), notlar: val('h-not') };
+          if (body.durum === 'odendi' && h.durum !== 'odendi') body.odeme_tarihi = body.tarih <= today() ? body.tarih : today();
+          return api(isNew ? 'hareket' : 'hareket/' + h.id, isNew ? 'POST' : 'PUT', body).then(function (r) {
+            upsert('hareket', r.item); if (r.extra) upsert('hareket', r.extra);
+            toast(r.extra ? 'Kaydedildi. Sonraki ödeme ' + fmtD(r.extra.tarih) + ' için eklendi.' : (isNew ? 'Kayıt eklendi' : 'Kayıt güncellendi'));
+            if (st.view === 'fatura') st.tab.finans = 'kasa';
+            render();
+          });
+        }
+      });
+    if (isNew && !gelir) {
+      // A future date usually means the payment is still to be made.
+      var touched = false, ds = $('#h-durum');
+      ds.addEventListener('change', function () { touched = true; });
+      var sync = function () { if (!touched) ds.value = val('h-tarih') > today() ? 'bekliyor' : 'odendi'; };
+      $('#h-tarih').addEventListener('change', sync); $('#h-tarih').addEventListener('input', sync);
+    }
+  }
+
+  function profilModal() {
+    var me = B.me;
+    modal('Profilim',
+      '<div class="form">' +
+      fld('Ad soyad', '<input id="u-isim" required value="' + esc(me.ad) + '">', 'full') +
+      fld('E-posta', '<input id="u-mail" type="email" value="' + esc(me.email) + '">') +
+      fld('Telefon', '<input id="u-tel" type="tel" value="' + esc(me.tel) + '" placeholder="+90 5xx xxx xx xx">') +
+      '<p class="hint full" style="margin:-4px 0 0">Ad, e-posta ve telefonunuz tekliflerde “Gönderen” bölümünde görünür.</p>' +
+      fld('Yeni şifre', '<input id="u-pass" type="password" autocomplete="new-password" placeholder="Değiştirmek istemiyorsanız boş bırakın">', 'full') + '</div>',
+      {
+        submit: function () {
+          return api('profil', 'POST', { ad: val('u-isim'), email: val('u-mail'), tel: val('u-tel'), sifre: $('#u-pass').value }).then(function (r) {
+            B.me = r.me; B.users = r.users; toast('Profil güncellendi'); shell(); bindShell(); render();
+          });
+        }
+      });
+  }
+
+  function kullaniciModal() {
+    modal('Kullanıcı ekle',
+      '<div class="form">' +
+      fld('Ad soyad', '<input id="n-isim" required>', 'full') +
+      fld('E-posta', '<input id="n-mail" type="email" required>') +
+      fld('Telefon', '<input id="n-tel" type="tel">') +
+      fld('Rol', '<select id="n-rol">' + opt([['rego_satis', 'Satış'], ['rego_saha', 'Saha ekibi'], ['rego_yonetici', 'Yönetici']], 'rego_satis') + '</select>') +
+      fld('Şifre (isteğe bağlı)', '<input id="n-sifre" type="text" autocomplete="new-password" placeholder="En az 8 karakter">') +
+      '<p class="hint full" style="margin:0">Şifre yazarsanız kullanıcı hemen o şifreyle giriş yapabilir. Boş bırakırsanız şifresini belirlemesi için e-posta gönderilir.</p></div>',
+      {
+        ok: 'Kullanıcıyı ekle',
+        submit: function () {
+          if (!val('n-isim') || !val('n-mail')) { toast('Ad ve e-posta gerekli.', true); return false; }
+          if (val('n-sifre') && val('n-sifre').length < 8) { toast('Şifre en az 8 karakter olmalı.', true); return false; }
+          return api('kullanici', 'POST', { ad: val('n-isim'), email: val('n-mail'), tel: val('n-tel'), rol: val('n-rol'), sifre: val('n-sifre') }).then(function (r) { B.users = r.users; toast(r.mesaj || 'Kullanıcı eklendi'); render(); });
+        }
+      });
+  }
+
+  function sablonModal(i) {
+    var S = st.forms.S;
+    var sb = i == null ? { ad: '', kosullar: [{ baslik: 'Ödeme Şartları', metin: '' }, { baslik: 'Teslim Süresi', metin: 'Öngörülen teslim tarihleri teklifimizde belirtilmiştir.' }], ek_baslik: '', ek_metin: '', ek_yeni_sayfa: 0 } : clone(S.sablonlar[i]);
+    st.forms.SB = sb;
+    function body() {
+      return '<datalist id="dl-kos">' + KOS_BASLIK.map(function (b) { return '<option value="' + esc(b) + '">'; }).join('') + '</datalist><div class="form">' +
+        fld('Şablon adı', '<input id="sb-isim" data-bind="ad" required value="' + esc(sb.ad) + '">', 'full') + '</div>' +
+        '<h3>Koşullar</h3><div id="sb-kos">' + kosEditor(sb, 'SB') + '</div><h3>Ek açıklama</h3><div class="form">' +
+        fld('Başlık', '<input id="sb-ekb" data-bind="ek_baslik" value="' + esc(sb.ek_baslik) + '">', 'full') +
+        fld('Metin', '<textarea id="sb-ekm" data-bind="ek_metin" data-auto rows="3">' + esc(sb.ek_metin) + '</textarea>', 'full') +
+        '<label class="check full" for="sb-ekn"><input id="sb-ekn" type="checkbox" data-bind="ek_yeni_sayfa"' + (sb.ek_yeni_sayfa ? ' checked' : '') + '> Yeni sayfada başlat</label></div>';
+    }
+    modal(i == null ? 'Yeni koşul şablonu' : 'Şablonu düzenle', body(), {
+      wide: true, root: 'SB', ok: 'Şablonu kaydet',
+      submit: function () {
+        if (!sb.ad.trim()) { toast('Şablon adı gerekli.', true); return false; }
+        if (i == null) S.sablonlar.push(sb); else S.sablonlar[i] = sb;
+        return saveSettings().then(function () { toast('Şablon kaydedildi'); });
+      }
+    });
+  }
+  function saveSettings() {
+    return api('ayarlar', 'POST', st.forms.S).then(function (r) { B.settings = r.settings; st.forms.S = clone(r.settings); render(); });
+  }
+
+  /* ---------- menus ---------- */
+  function openMenu(anchor, html) {
+    closeMenu();
+    var m = document.createElement('div'); m.className = 'menu'; m.innerHTML = html;
+    anchor.parentElement.style.position = 'relative';
+    anchor.parentElement.appendChild(m); st.menu = m;
+    var f = m.querySelector('button,a'); if (f) f.focus();
+  }
+  function closeMenu() { if (st.menu) { st.menu.remove(); st.menu = null; } }
+
+  /* ---------- events ---------- */
+  function autosize(t) { t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight + 2, 600) + 'px'; }
+
+  function formRoot(el) { var r = el.closest('[data-root]'); return r ? r.dataset.root : null; }
+
+  function onInput(e) {
+    var el = e.target;
+    if (el.id === 'q') {
+      st.q = lc(el.value.trim());
+      if (st.q && ['dash', 'kullanici', 'ayarlar'].indexOf(st.view) > -1) { st.view = 'ara'; }
+      else if (!st.q && st.view === 'ara') st.view = 'dash';
+      if (st.view === 'teklif' && st.id) return;
+      var pos = el.selectionStart; render(); var q = $('#q'); q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {}
+      return;
+    }
+    if (el.matches('textarea[data-auto]')) autosize(el);
+    if (!el.dataset.bind) return;
+    var root = formRoot(el); var F = root && st.forms[root]; if (!F) return;
+    var v;
+    if (el.type === 'checkbox') v = el.checked ? 1 : 0;
+    else if (el.hasAttribute('data-num')) v = parseNum(el.value);
+    else if (el.hasAttribute('data-int')) v = parseInt(el.value, 10) || 0;
+    else if (el.hasAttribute('data-csv')) v = el.value.split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+    else v = el.value;
+    setPath(F, el.dataset.bind, v);
+    if (root === 'E') { st.dirty = true; onEditorInput(el); }
+    if (root === 'S') st.dirty = true;
+  }
+
+  function rerenderKos(root) {
+    if (root === 'E') { var y = window.scrollY; render(); window.scrollTo(0, y); return; }
+    var box = $('#sb-kos'); if (box) { box.innerHTML = kosEditor(st.forms.SB, 'SB'); $$('textarea[data-auto]', box).forEach(autosize); }
+  }
+
+  function onClick(e) {
+    var stop = e.target.closest('[data-stop]');
+    if (stop) { e.stopPropagation(); return; }
+    var g = e.target.closest('[data-go]');
+    if (g && !e.target.closest('[data-act]:not(tr)')) { e.preventDefault(); closeMenu(); hideCalPop(true); go(g.dataset.go); return; }
+    var a = e.target.closest('[data-act]');
+    if (!a) { if (st.menu && !e.target.closest('.menu')) closeMenu(); if (!e.target.closest('#calpop')) hideCalPop(true); return; }
+    var act = a.dataset.act, id = +a.dataset.id, i = a.dataset.i != null ? +a.dataset.i : null;
+    if (a.closest('#calpop')) hideCalPop(true);
+    var root = formRoot(a);
+    switch (act) {
+      case 'cal-day':
+        var cp = $('#calpop');
+        if (cp && cp.dataset.d === a.dataset.d && !st.calHover) { hideCalPop(true); break; }
+        st.calHover = false; showCalPop(a);
+        var only = dayEvents(a.dataset.d);
+        if (only.length === 1 && e.detail > 0 && window.matchMedia('(hover: hover)').matches) { var o = only[0]; hideCalPop(true); if (o.act) { var fake = document.createElement('button'); fake.dataset.act = o.act; fake.dataset.id = o.id; document.body.appendChild(fake); fake.click(); fake.remove(); } else go(o.go); }
+        break;
+      case 'open-drawer': $('#rail').classList.add('open'); $('#scrim').classList.add('open'); break;
+      case 'close-drawer': $('#rail').classList.remove('open'); $('#scrim').classList.remove('open'); break;
+      case 'user-menu':
+        if (st.menu) { closeMenu(); break; }
+        openMenu(a, '<button type="button" data-act="profil">Profilim</button>' + (B.admin ? '<a href="' + esc(B.admin) + '">WordPress yönetimi</a>' : '') + '<a href="' + esc(C.home) + '">Siteye dön</a><hr><a href="' + esc(B.logout) + '">Çıkış yap</a>');
+        break;
+      case 'new-menu':
+        if (st.menu) { closeMenu(); break; }
+        openMenu(a, [['musteri', 'Müşteri', 'rego_musteri_edit'], ['teklif', 'Fiyat teklifi', 'rego_teklif'], ['proje', 'Proje', 'rego_proje_edit'], ['saha', 'Saha ziyareti', 'rego_saha_edit'], ['fatura', 'Fatura kaydı', 'rego_fatura'], ['gelir', 'Gelir (faturasız ödeme)', 'rego_kasa'], ['gider', 'Gider / ödeme (kira vb.)', 'rego_kasa']]
+          .filter(function (x) { return can(x[2]); }).map(function (x) { return '<button type="button" data-act="new" data-k="' + x[0] + '">' + x[1] + '</button>'; }).join(''));
+        break;
+      case 'new':
+        closeMenu();
+        ({ musteri: function () { musteriModal(); }, teklif: function () { go('teklif/yeni'); }, proje: function () { projeModal(); }, saha: function () { sahaModal(); }, fatura: function () { faturaModal(); }, gelir: function () { hareketModal('gelir'); }, gider: function () { hareketModal('gider'); } })[a.dataset.k]();
+        break;
+      case 'profil': closeMenu(); profilModal(); break;
+      case 'tab': st.tab[a.dataset.k] = a.dataset.v; render(); break;
+      case 'para': st.para = a.dataset.p; render(); break;
+      case 'cal': var d = new Date(st.cal[0], st.cal[1] + (+a.dataset.d), 1); st.cal = [d.getFullYear(), d.getMonth()]; render(); break;
+      case 'musteri-new': musteriModal(); break;
+      case 'musteri-edit': musteriModal(byId('musteri', id)); break;
+      case 'proje-new': projeModal(); break;
+      case 'proje-edit': projeModal(byId('proje', id)); break;
+      case 'proje-adv':
+        var p = byId('proje', id); var si = STAGES.findIndex(function (s) { return s[0] === p.asama; });
+        var next = STAGES[Math.min(si + 1, 3)];
+        api('proje/' + id, 'PUT', { asama: next[0] }).then(function (r) { upsert('proje', r.item); render(); toast(p.kod + ' → ' + next[1]); }).catch(fail);
+        break;
+      case 'saha-new': sahaModal(); break;
+      case 'saha-edit': sahaModal(byId('saha', id)); break;
+      case 'saha-done': api('saha/' + id, 'PUT', { durum: 'tamamlandi' }).then(function (r) { upsert('saha', r.item); render(); toast('Ziyaret tamamlandı'); }).catch(fail); break;
+      case 'fatura-new': faturaModal(); break;
+      case 'hareket-new': hareketModal(a.dataset.tur); break;
+      case 'hareket-edit': hareketModal(null, byId('hareket', id)); break;
+      case 'fin-kasa': st.tab.finans = 'kasa'; go('fatura'); break;
+      case 'hareket-ode':
+        api('hareket/' + id, 'PUT', { durum: 'odendi', odeme_tarihi: today() }).then(function (r) {
+          upsert('hareket', r.item); if (r.extra) upsert('hareket', r.extra); render();
+          toast(r.extra ? 'Ödendi. Sonraki ödeme ' + fmtD(r.extra.tarih) + ' için eklendi.' : 'Ödendi olarak kaydedildi');
+        }).catch(fail);
+        break;
+      case 'fatura-edit': faturaModal(byId('fatura', id)); break;
+      case 'fatura-ode': e.stopPropagation(); api('fatura/' + id, 'PUT', { odendi: 1, odeme_tarihi: today() }).then(function (r) { upsert('fatura', r.item); render(); toast('Tahsilat kaydedildi'); }).catch(fail); break;
+      case 'kullanici-new': kullaniciModal(); break;
+      case 'sifre-ver':
+        var su = user(id);
+        modal('Şifre ver: ' + su.ad, '<div class="form">' + fld('Yeni şifre', '<input id="sv-sifre" type="text" autocomplete="new-password" placeholder="En az 8 karakter">', 'full') + '<p class="hint full" style="margin:0">Giriş için e-posta: ' + esc(su.email) + '. Şifreyi kendisine iletin; Profilim ekranından değiştirebilir.</p></div>', {
+          ok: 'Şifreyi kaydet',
+          submit: function () {
+            if (val('sv-sifre').length < 8) { toast('Şifre en az 8 karakter olmalı.', true); return false; }
+            return api('kullanici/' + su.id + '/sifre', 'POST', { sifre: val('sv-sifre') }).then(function () { toast('Şifre kaydedildi'); });
+          }
+        });
+        break;
+      case 'm-close': closeModal(); break;
+      case 'm-del':
+        $('#mconfirm').innerHTML = '<div class="confirm-bar">Bu kayıt kalıcı olarak silinsin mi?<span class="row" style="margin-left:auto"><button type="button" class="btn sm" data-act="m-del-no">Vazgeç</button><button type="button" class="btn sm danger" data-act="m-del-yes">Evet, sil</button></span></div>';
+        break;
+      case 'm-del-no': $('#mconfirm').innerHTML = ''; break;
+      case 'm-del-yes': st.modalDel().then(closeModal).catch(fail); break;
+
+      /* editor */
+      case 'kalem-add': st.forms.E.kalemler.push({ ad: '', miktar: 1, birim: 'Adet', fiyat: 0, para: (st.forms.E.kalemler.slice(-1)[0] || {}).para || '€', teslim: '' }); st.dirty = true; rerenderKos('E'); var n = st.forms.E.kalemler.length - 1; var t = document.getElementById('k' + n + '-urun'); if (t) t.focus(); break;
+      case 'kalem-del': if (st.forms.E.kalemler.length > 1) { st.forms.E.kalemler.splice(i, 1); st.dirty = true; rerenderKos('E'); } else toast('Teklifte en az bir kalem olmalı.', true); break;
+      case 'kos-add': st.forms[root].kosullar.push({ baslik: '', metin: '' }); if (root === 'E') st.dirty = true; rerenderKos(root); break;
+      case 'kos-del': st.forms[root].kosullar.splice(i, 1); if (root === 'E') st.dirty = true; rerenderKos(root); break;
+      case 'kos-up': case 'kos-down':
+        var ks = st.forms[root].kosullar, j = act === 'kos-up' ? i - 1 : i + 1;
+        if (j >= 0 && j < ks.length) { var tmp = ks[i]; ks[i] = ks[j]; ks[j] = tmp; if (root === 'E') st.dirty = true; rerenderKos(root); }
+        break;
+      case 'sablon-uygula':
+        var sx = $('#e-sablon').value;
+        if (sx === '') { toast('Önce bir şablon seçin.', true); break; }
+        var sb = B.settings.sablonlar[+sx], E = st.forms.E;
+        E.kosullar = clone(sb.kosullar); E.ek_baslik = sb.ek_baslik; E.ek_metin = sb.ek_metin; E.ek_yeni_sayfa = sb.ek_yeni_sayfa; st.dirty = true;
+        rerenderKos('E'); toast('“' + sb.ad + '” koşulları uygulandı');
+        break;
+      case 'e-save': a.disabled = true; saveEditor().then(function () { toast('Teklif kaydedildi'); }).catch(function (er) { a.disabled = false; if (er.message !== 'skip') fail(er); }); break;
+      case 'e-pdf':
+        var dl = !!a.dataset.dl;
+        var win = dl ? null : window.open('about:blank', '_blank');
+        var need = st.dirty || !st.forms.E.id;
+        (need ? saveEditor() : Promise.resolve(st.forms.E)).then(function (it) {
+          var u = pdfUrl(it.id, dl);
+          if (dl) location.href = u; else if (win) win.location = u; else window.open(u, '_blank');
+        }).catch(function (er) { if (win) win.close(); if (er.message !== 'skip') fail(er); });
+        break;
+      case 'e-kopya':
+        api('teklif/' + st.forms.E.id + '/kopyala', 'POST', {}).then(function (r) { upsert('teklif', r.item); st.forms.E = null; go('teklif/' + r.item.id); toast('Kopya oluşturuldu: ' + r.item.no); }).catch(fail);
+        break;
+      case 'e-sil':
+        var bar = document.createElement('div');
+        bar.className = 'confirm-bar'; bar.innerHTML = 'Teklif kalıcı olarak silinsin mi?<span class="row" style="margin-left:auto"><button type="button" class="btn sm" data-act="e-sil-no">Vazgeç</button><button type="button" class="btn sm danger" data-act="e-sil-yes">Evet, sil</button></span>';
+        a.replaceWith(bar);
+        break;
+      case 'e-sil-no': render(); break;
+      case 'e-sil-yes': api('teklif/' + st.forms.E.id, 'DELETE').then(function () { drop('teklif', st.forms.E.id); st.dirty = false; go('teklif'); toast('Teklif silindi'); }).catch(fail); break;
+      case 'e-sablon-kaydet':
+        modal('Koşulları şablon olarak kaydet', '<div class="form">' + fld('Şablon adı', '<input id="sbn" required placeholder="Örn. Yerinde tarama – otomotiv">', 'full') + '<p class="hint full" style="margin:0">Aynı adda şablon varsa üzerine yazılır.</p></div>', {
+          submit: function () {
+            var E = st.forms.E;
+            if (!val('sbn')) { toast('Şablon adı gerekli.', true); return false; }
+            return api('sablon', 'POST', { ad: val('sbn'), kosullar: E.kosullar, ek_baslik: E.ek_baslik, ek_metin: E.ek_metin, ek_yeni_sayfa: E.ek_yeni_sayfa }).then(function (r) { B.settings.sablonlar = r.sablonlar; st.forms.S = null; toast('Şablon kaydedildi'); var y = window.scrollY; render(); window.scrollTo(0, y); });
+          }
+        });
+        break;
+      case 'e-faturala':
+        var E2 = st.forms.E;
+        modal('Fatura kaydı oluştur', '<p class="muted" style="margin:0">Teklif toplamına KDV eklenerek her para birimi için bir fatura kaydı açılır: <b>' + esc(sumTxt(E2.toplamlar || {})) + '</b> + KDV.</p><div class="form">' +
+          fld('KDV oranı (%)', '<input id="fk-kdv" inputmode="decimal" value="20">') + fld('Vade', '<input id="fk-vade" type="date" value="' + addDays(today(), 15) + '">') +
+          fld('e-Fatura no (isteğe bağlı)', '<input id="fk-no">', 'full') + '</div>', {
+            ok: 'Oluştur',
+            submit: function () {
+              return api('teklif/' + E2.id + '/faturala', 'POST', { kdv: parseNum(val('fk-kdv')), vade: val('fk-vade'), no: val('fk-no') }).then(function (r) {
+                r.items.forEach(function (f) { upsert('fatura', f); }); upsert('teklif', r.teklif); st.forms.E = null; toast('Fatura kaydı oluşturuldu'); render();
+              });
+            }
+          });
+        break;
+      case 'e-proje':
+        var E3 = st.forms.E;
+        projeModal({ ad: String((E3.kalemler[0] || {}).ad || '').replace(/\s*\n\s*/g, ' '), musteri_id: E3.musteri_id, hizmet: (B.settings.hizmetler || [])[0] || '', asama: 'onay', teslim: addDays(today(), 14), notlar: E3.no, teklif_id: E3.id });
+        break;
+
+      /* settings */
+      case 'ayar-save': a.disabled = true; saveSettings().then(function () { st.dirty = false; toast('Ayarlar kaydedildi'); }).catch(function (er) { a.disabled = false; fail(er); }); break;
+      case 'sb-new': sablonModal(null); break;
+      case 'upd-check':
+        a.disabled = true; $('#upd-msg').textContent = 'Denetleniyor…';
+        api('guncelleme').then(function (r) {
+          a.disabled = false;
+          if (r.error) { $('#upd-msg').textContent = 'Güncelleme sunucusuna ulaşılamadı: ' + r.error; return; }
+          $('#upd-msg').textContent = r.new ? 'Yeni sürüm var: ' + r.latest + ' (yüklü: ' + r.current + ').' + (r.notes ? ' ' + r.notes : '') : 'Panel güncel (' + r.current + ').';
+          $('#upd-btn').hidden = !r.new;
+        }).catch(function (er) { a.disabled = false; fail(er); });
+        break;
+      case 'upd-install':
+        a.disabled = true; $('#upd-msg').textContent = 'Güncelleniyor, lütfen bekleyin…';
+        api('guncelleme', 'POST', {}).then(function (r) {
+          $('#upd-msg').textContent = r.message; toast(r.message);
+          if (r.updated) setTimeout(function () { location.reload(); }, 1500);
+        }).catch(function (er) { a.disabled = false; $('#upd-msg').textContent = er.message; fail(er); });
+        break;
+      case 'hz-add': st.forms.S.hazirlayanlar = st.forms.S.hazirlayanlar || []; st.forms.S.hazirlayanlar.push({ ad: '', email: '', tel: '' }); st.dirty = true; render(); var hi = document.getElementById('hz' + (st.forms.S.hazirlayanlar.length - 1) + 'a'); if (hi) hi.focus(); break;
+      case 'hz-del': st.forms.S.hazirlayanlar.splice(i, 1); st.dirty = true; render(); break;
+      case 'sb-edit': sablonModal(i); break;
+      case 'sb-del':
+        var nm = st.forms.S.sablonlar[i].ad;
+        a.outerHTML = '<span class="confirm-bar">Silinsin mi?<button type="button" class="btn sm danger" data-act="sb-del-yes" data-i="' + i + '">Sil</button></span>';
+        void nm;
+        break;
+      case 'sb-del-yes': st.forms.S.sablonlar.splice(i, 1); saveSettings().then(function () { toast('Şablon silindi'); }).catch(fail); break;
+    }
+  }
+
+  function onChange(e) {
+    var el = e.target;
+    if (el.dataset.actChange === 'hazirlayan') {
+      var E = st.forms.E, h = hazirlayanlar().find(function (x) { return x.ad === el.value; });
+      if (E && h) { E.gonderen_ad = h.ad; E.gonderen_email = h.email || ''; E.gonderen_tel = h.tel || ''; st.dirty = true; }
+      return;
+    }
+    if (el.dataset.actChange === 'rol') {
+      var uid = +el.dataset.id;
+      api('kullanici/' + uid, 'PUT', { rol: el.value }).then(function (r) { B.users = r.users; toast('Rol güncellendi'); render(); }).catch(function (er) { fail(er); render(); });
+      return;
+    }
+    if (el.dataset.bind && (el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'date')) onInput(e);
+    if (el.dataset.bind && el.hasAttribute('data-num')) { var v = parseNum(el.value); el.value = v ? num(v) : ''; }
+  }
+
+  function bindShell() {
+    var q = $('#q'); if (q) q.value = st.q;
+  }
+
+  function boot() {
+    api('bootstrap').then(function (b) {
+      B = b;
+      shell(); bindShell();
+      document.addEventListener('click', onClick);
+      document.addEventListener('input', onInput);
+      document.addEventListener('change', onChange);
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { hideCalPop(true); if ($('#mscrim')) closeModal(); closeMenu(); $('#rail').classList.remove('open'); $('#scrim').classList.remove('open'); }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && st.view === 'teklif' && st.id) { e.preventDefault(); saveEditor().then(function () { toast('Teklif kaydedildi'); }).catch(function (er) { if (er.message !== 'skip') fail(er); }); }
+      });
+      document.addEventListener('mousedown', function (e) { if (e.target.id === 'mscrim') closeModal(); });
+      document.addEventListener('mouseover', function (e) {
+        if (!window.matchMedia('(hover: hover)').matches) return;
+        var cell = e.target.closest('.cd.mark'), pop = e.target.closest('#calpop');
+        if (cell) { st.calHover = true; showCalPop(cell); }
+        else if (pop) clearTimeout(calTimer);
+        else if ($('#calpop')) hideCalPop(false);
+      });
+      document.addEventListener('focusin', function (e) {
+        var cell = e.target.closest && e.target.closest('.cd.mark');
+        if (cell && cell.matches(':focus-visible')) showCalPop(cell); // keyboard only; taps are handled by click
+      });
+      window.addEventListener('hashchange', function () {
+        if (st.dirty && !st.leaving) {
+          var target = location.hash;
+          st.leaving = true; history.back();
+          setTimeout(function () {
+            st.leaving = false;
+            modal('Kaydedilmemiş değişiklikler', '<p style="margin:0">Bu sayfada kaydetmediğiniz değişiklikler var. Kaydetmeden çıkarsanız kaybolur.</p>', {
+              ok: 'Kaydetmeden çık', submit: function () { st.dirty = false; location.hash = target; }
+            });
+          }, 30);
+          return;
+        }
+        if (st.leaving) return;
+        route();
+      });
+      window.addEventListener('beforeunload', function (e) { if (st.dirty) { e.preventDefault(); e.returnValue = ''; } });
+      route();
+    }).catch(function (e) {
+      document.getElementById('app').innerHTML = '<div class="auth"><div class="auth-card"><h1>Panel açılamadı</h1><p class="sub">' + esc(e.message) + '</p><a class="btn" href="">Sayfayı yenile</a></div></div>';
+    });
+  }
+  boot();
+})();
