@@ -1,6 +1,6 @@
 {
-  "version": "1.3.0",
-  "package": "https://github.com/ferit1/rego-panel/archive/6ca1a07ebd610bff8916ac794e0c8b183c19eaba.zip",
+  "version": "1.4.0",
+  "package": "https://github.com/ferit1/rego-panel/archive/d93a7c02025314d40079b7eac974170413c7d6b2.zip",
   "date": "2026-10-23",
-  "notes": "Sunum sayfası: 30 dakika sonra ya da sekme kapatılınca şifre yeniden sorulur; tarayıcı şifreyi kaydetmeyi önermez."
+  "notes": "Hatırlatmalar: saha ziyareti, ödeme ve projelere hatırlatma eklenebilir; zamanı gelince zilde ve masaüstünde bildirim çıkar. Resmi WhatsApp (0850) ayarları hazır, kapalı."
 }
