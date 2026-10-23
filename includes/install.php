@@ -170,6 +170,12 @@ function rego_panel_default_settings() {
 		'kdv_notu'       => "*Birim fiyatlarına KDV dahil değildir. Uygulanacak KDV oranı %20'dir.",
 		'teyit_metni'    => 'Teklif formu dahilinde verilen ürün, fiyat ve adetleri onayladığımızı, Teklif Koşullarının tarafımızca okunduğunu ve kabul edildiğini beyan ederiz.',
 		'teyit_alt'      => 'Yetkili kişi imzası varsa kaşe',
+		'wa_aktif'       => 0,
+		'wa_phone_id'    => '',
+		'wa_token'       => '',
+		'wa_sablon'      => 'rego_hatirlatma',
+		'wa_dil'         => 'tr',
+		'wa_surum'       => 'v24.0',
 		'hazirlayanlar'  => array(
 			array( 'ad' => 'Ferit ÖZEN', 'email' => 'ferit@regotechnology.com', 'tel' => '+90 542 430 5866' ),
 			array( 'ad' => 'Kübra BOZKURT', 'email' => '', 'tel' => '' ),
@@ -239,6 +245,9 @@ function rego_panel_create_page() {
 
 function rego_panel_activate() {
 	rego_panel_install_tables();
+	if ( function_exists( 'rego_hat_tables' ) ) {
+		rego_hat_tables();
+	}
 	rego_panel_install_roles();
 	if ( ! get_option( 'rego_panel_settings' ) ) {
 		add_option( 'rego_panel_settings', rego_panel_default_settings(), '', false );

@@ -128,6 +128,7 @@
       '<button class="menu-btn" type="button" data-act="open-drawer" aria-label="Menüyü aç"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>' +
       '<label class="search" for="q"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="Müşteri, teklif, proje ara…" autocomplete="off"></label>' +
       '<span class="sp"></span>' +
+      '<div class="bellw"><button class="icon-btn bell" type="button" data-act="bell" aria-label="Bildirimler" aria-haspopup="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="badge" id="bell-n" hidden>0</span></button></div>' +
       '<div class="who"><button class="who-btn" type="button" data-act="user-menu" aria-haspopup="true"><span class="avatar">' + esc(initials(displayName(B.me))) + '</span><span class="who-txt"><b>' + esc(displayName(B.me)) + '</b><small>' + esc(ROLES[B.me.rol] || '') + '</small></span></button></div>' +
       '</header><main class="content" id="view" tabindex="-1"></main></div></div>' +
       '<div id="layer"></div>';
@@ -189,13 +190,17 @@
       if (p.teslim !== ds || p.asama === 'teslim') return;
       ev.push({ k: 'teslim', t: 'Teslim: ' + p.ad, m: p.kod + ' · ' + firma(p.musteri_id), act: can('rego_proje_edit') ? 'proje-edit' : '', id: p.id, go: 'proje' });
     });
+    (B.hatirlatma || []).forEach(function (h) {
+      if (h.kaynak !== 'genel' || h.durum === 'iptal' || String(h.zaman).slice(0, 10) !== ds) return;
+      ev.push({ k: 'hat', t: 'Hatırlatma: ' + h.baslik, m: String(h.zaman).slice(11, 16) + (h.mesaj ? ' · ' + h.mesaj : ''), act: 'hat-edit', id: h.id, go: 'dash', done: h.durum === 'gonderildi' });
+    });
     list('fatura').forEach(function (f) {
       if (f.vade !== ds || f.odendi) return;
       ev.push({ k: 'fatura', t: 'Fatura vadesi: ' + firma(f.musteri_id), m: money(f.tutar, f.para) + (f.no ? ' · ' + f.no : ''), act: 'fatura-edit', id: f.id, go: 'fatura' });
     });
     return ev;
   }
-  var EV_KIND = { saha: 'Saha ziyareti', odeme: 'Ödeme / gelir', teslim: 'Proje teslimi', fatura: 'Fatura vadesi' };
+  var EV_KIND = { saha: 'Saha ziyareti', odeme: 'Ödeme / gelir', teslim: 'Proje teslimi', fatura: 'Fatura vadesi', hat: 'Hatırlatma' };
   function calendar(y, m) {
     var first = new Date(y, m, 1), off = (first.getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate();
     var pre = y + '-' + String(m + 1).padStart(2, '0') + '-';
@@ -243,7 +248,7 @@
     if (now) go(); else calTimer = setTimeout(go, 220);
   }
   function newMenu() {
-    var items = [['musteri', 'Müşteri', 'rego_musteri_edit'], ['teklif', 'Fiyat teklifi', 'rego_teklif'], ['proje', 'Proje', 'rego_proje_edit'], ['saha', 'Saha ziyareti', 'rego_saha_edit'], ['fatura', 'Fatura kaydı', 'rego_fatura'], ['gelir', 'Gelir (faturasız ödeme)', 'rego_kasa'], ['gider', 'Gider / ödeme (kira vb.)', 'rego_kasa']];
+    var items = [['musteri', 'Müşteri', 'rego_musteri_edit'], ['teklif', 'Fiyat teklifi', 'rego_teklif'], ['proje', 'Proje', 'rego_proje_edit'], ['saha', 'Saha ziyareti', 'rego_saha_edit'], ['fatura', 'Fatura kaydı', 'rego_fatura'], ['gelir', 'Gelir (faturasız ödeme)', 'rego_kasa'], ['gider', 'Gider / ödeme (kira vb.)', 'rego_kasa'], ['hatirlatma', 'Hatırlatma', 'rego_access']];
     items = items.filter(function (x) { return can(x[2]); });
     if (!items.length) return '';
     return '<div class="row" style="position:relative"><button class="btn primary" type="button" data-act="new-menu" aria-haspopup="true">+ Yeni kayıt</button></div>';
@@ -308,11 +313,22 @@
     var now = new Date();
     var row3 = '<section class="grid2"><div class="panel"><div class="panel-h"><div><h2>Devam eden projeler</h2><p>Teslim tarihine göre</p></div><button class="btn sm" data-go="proje">Proje panosu</button></div><div class="tablewrap"><table class="t"><thead><tr><th>Kod</th><th>Proje</th><th>Aşama</th><th class="r">Teslim</th></tr></thead><tbody>' +
       (aktif.slice().sort(function (a, b) { return String(a.teslim || '9').localeCompare(String(b.teslim || '9')); }).slice(0, 8).map(function (p) { return '<tr><td class="mono">' + esc(p.kod) + '</td><td><div class="strong">' + esc(p.ad) + '</div><div class="small muted">' + esc(firma(p.musteri_id)) + ' · <span class="svc">' + esc(p.hizmet) + '</span></div></td><td>' + stageChip(p.asama) + '</td><td class="r num">' + fmtD(p.teslim) + '</td></tr>'; }).join('') || emptyRow(4, 'Aktif proje yok.')) +
-      '</tbody></table></div></div><div class="panel"><div class="panel-h"><div><h2>' + AYU[now.getMonth()] + ' ' + now.getFullYear() + '</h2><p>Saha, ödeme, teslim ve vade günleri</p></div></div>' + calendar(now.getFullYear(), now.getMonth()) + '</div></section>';
+      '</tbody></table></div></div><div class="stack" style="gap:14px"><div class="panel"><div class="panel-h"><div><h2>' + AYU[now.getMonth()] + ' ' + now.getFullYear() + '</h2><p>Saha, ödeme, teslim ve vade günleri</p></div></div>' + calendar(now.getFullYear(), now.getMonth()) + '</div>' + hatPanel() + '</div></section>';
 
     return '<div class="head"><div><h1>' + hi + ', ' + esc(first) + '.</h1><p class="sub">' + subs.join(' · ') + '</p></div>' + newMenu() + '</div>' +
       '<section class="kpis">' + kpis + '</section><section class="grid2">' + left + right + '</section>' + row2 + row3;
   };
+  function hatPanel() {
+    var mine = (B.hatirlatma || []).filter(function (h) { return h.durum === 'bekliyor' && (h.alicilar.indexOf(B.me.id) > -1 || h.created_by === B.me.id); })
+      .sort(function (a, b) { return String(a.zaman).localeCompare(String(b.zaman)); }).slice(0, 6);
+    var kind = { genel: 'Hatırlatma', saha: 'Saha', hareket: 'Ödeme', proje: 'Teslim' };
+    return '<div class="panel"><div class="panel-h"><div><h2>Hatırlatmalarım</h2><p>Sırası gelince zilde ve masaüstünde bildirim olarak çıkar</p></div><button class="btn sm" type="button" data-act="hat-new">+ Hatırlatma</button></div><div class="list">' +
+      (mine.map(function (h) {
+        return '<button type="button" class="li hat-li" data-act="hat-edit" data-id="' + h.id + '"><span class="date"><b>' + dt(String(h.zaman).slice(0, 10)).getDate() + '</b><small>' + AY[dt(String(h.zaman).slice(0, 10)).getMonth()] + '</small></span>' +
+          '<span style="min-width:0"><span class="t">' + esc(h.baslik.replace(/^(Saha|Ödeme|Teslim|Beklenen ödeme): /, '')) + '</span><span class="m">' + esc(kind[h.kaynak] || '') + ' · ' + esc(h.alicilar.map(function (id) { var u = user(id); return u ? displayName(u).split(' ')[0] : ''; }).filter(Boolean).join(', ')) + '</span></span>' +
+          '<span class="mono m">' + esc(String(h.zaman).slice(11, 16)) + '</span></button>';
+      }).join('') || '<p class="empty"><b>Bekleyen hatırlatma yok.</b>Saha ziyareti, ödeme ya da projeye hatırlatma ekleyebilir veya “+ Hatırlatma” ile tek başına kurabilirsiniz.</p>') + '</div></div>';
+  }
   function kpi(l, v, n) { return '<div class="kpi"><span class="lab">' + esc(l) + '</span><span class="val">' + v + '</span><span class="note">' + n + '</span></div>'; }
   function fv(f) { return { para: f.para, v: Number(f.tutar) }; }
   function flatTop(ts) { var r = []; ts.forEach(function (t) { Object.keys(t.toplamlar || {}).forEach(function (p) { r.push({ para: p, v: t.toplamlar[p] }); }); }); return r; }
@@ -734,6 +750,16 @@
     return '<div class="head"><div><h1>Ayarlar</h1><p class="sub">Teklif formunda görünen firma bilgileri, metinler ve koşul şablonları</p></div><button class="btn primary" type="button" data-act="ayar-save">Ayarları kaydet</button></div>' +
       '<div class="stack" style="gap:16px" data-root="S">' +
       '<section class="panel"><div class="panel-h"><div><h2>Panel sürümü</h2><p id="upd-msg">Yüklü sürüm ' + esc(B.version) + '. Yeni sürümler kendiliğinden kurulur; hemen denetlemek için düğmeyi kullanın.</p></div><div class="row"><button class="btn sm" type="button" data-act="upd-check">Güncellemeleri denetle</button><button class="btn sm primary" type="button" data-act="upd-install" hidden id="upd-btn">Şimdi güncelle</button></div></div></section>' +
+      '<section class="panel"><div class="panel-h"><div><h2>WhatsApp bildirimleri (resmi, 0850)</h2><p>Meta WhatsApp Business Platform kurulumu bitince doldurun. O zamana kadar hatırlatmalar yalnızca panelde gelir.</p></div>' + (S.wa_aktif && S.wa_token_var ? '<span class="chip c-ok">Açık</span>' : '<span class="chip c-mute">Kapalı</span>') + '</div><div class="form c3">' +
+      fld('Telefon numarası kimliği (Phone number ID)', '<input id="s-waid" data-bind="wa_phone_id" value="' + esc(S.wa_phone_id || '') + '" inputmode="numeric">') +
+      fld('Kalıcı erişim anahtarı', '<input id="s-watok" data-bind="wa_token" type="password" autocomplete="off" value="" placeholder="' + (S.wa_token_var ? 'Kayıtlı – değiştirmek için yeni anahtarı yapıştırın' : 'EAAG… ile başlar') + '">') +
+      fld('Mesaj şablonu adı', '<input id="s-wasb" data-bind="wa_sablon" value="' + esc(S.wa_sablon || 'rego_hatirlatma') + '">') +
+      fld('Şablon dili', '<input id="s-wadil" data-bind="wa_dil" value="' + esc(S.wa_dil || 'tr') + '">') +
+      fld('Graph API sürümü', '<input id="s-wasur" data-bind="wa_surum" value="' + esc(S.wa_surum || 'v24.0') + '">') +
+      '<label class="check" for="s-waon" style="align-self:end;padding-bottom:10px"><input id="s-waon" type="checkbox" data-bind="wa_aktif"' + (S.wa_aktif ? ' checked' : '') + '> Hatırlatmaları WhatsApp’tan da gönder</label>' +
+      '<p class="hint full" style="margin:0">Şablon gövdesinde iki değişken olmalı, örneğin: “Rego Panel hatırlatması: {{1}} – {{2}}”. Mesajlar her kişinin Kullanıcılar ekranındaki telefon numarasına gider.</p>' +
+      '<div class="full row"><button class="btn sm" type="button" data-act="wa-test">Bana test mesajı gönder</button><span class="hint" id="wa-sonuc"></span></div>' +
+      '</div></section>' +
       '<section class="panel"><h2 style="margin-bottom:14px">Fatura bilgileri (PDF alt kısmı)</h2><div class="form c3">' +
       fld('Firma unvanı', '<input id="s-unvan" data-bind="firma_unvan" value="' + esc(S.firma_unvan) + '">') +
       fld('Vergi no', '<input id="s-vn" data-bind="vergi_no" value="' + esc(S.vergi_no) + '">') +
@@ -783,6 +809,7 @@
       Promise.resolve(opts.submit(form)).then(function (ok) { if (ok !== false) closeModal(); else btn.disabled = false; }).catch(function (err) { btn.disabled = false; fail(err); });
     };
     st.modalDel = opts.del || null;
+    hatBind();
     $$('textarea[data-auto]', form).forEach(autosize);
     setTimeout(function () { var f = form.querySelector('input:not([type=hidden]),select,textarea'); if (f) f.focus(); }, 0);
   }
@@ -839,13 +866,13 @@
       fld('Hizmet', '<select id="p-svc"' + dis + '>' + opt((s.hizmetler || []).map(function (h) { return [h, h]; }), p.hizmet) + '</select>') +
       fld('Aşama', '<select id="p-asama">' + opt(STAGES, p.asama) + '</select>') +
       fld('Teslim tarihi', '<input id="p-tes" type="date" value="' + esc(p.teslim || '') + '"' + dis + '>') +
-      fld('Not', '<textarea id="p-not" data-auto rows="2" placeholder="Hassasiyet, çıktı formatı…">' + esc(p.notlar || '') + '</textarea>', 'full') + '</div>',
+      fld('Not', '<textarea id="p-not" data-auto rows="2" placeholder="Hassasiyet, çıktı formatı…">' + esc(p.notlar || '') + '</textarea>', 'full') + hatFields('proje', p.id, 'yok') + '</div>',
       {
         del: p.id && can('rego_sil') ? function () { return api('proje/' + p.id, 'DELETE').then(function () { drop('proje', p.id); toast('Proje silindi'); render(); }); } : null,
         submit: function () {
           if (!val('p-isim')) { toast('Proje adını girin.', true); return false; }
-          var body = { ad: val('p-isim'), musteri_id: +val('p-mus'), hizmet: val('p-svc'), asama: val('p-asama'), teslim: val('p-tes'), notlar: val('p-not'), teklif_id: p.teklif_id || 0 };
-          return api(p.id ? 'proje/' + p.id : 'proje', p.id ? 'PUT' : 'POST', body).then(function (r) { upsert('proje', r.item); toast(p.id ? 'Proje güncellendi' : 'Proje açıldı: ' + r.item.kod); if (!p.id && st.view === 'teklif') go('proje'); else render(); });
+          var body = { ad: val('p-isim'), musteri_id: +val('p-mus'), hizmet: val('p-svc'), asama: val('p-asama'), teslim: val('p-tes'), notlar: val('p-not'), teklif_id: p.teklif_id || 0, hatirlatma: hatVal() };
+          return api(p.id ? 'proje/' + p.id : 'proje', p.id ? 'PUT' : 'POST', body).then(function (r) { hatSync(r); upsert('proje', r.item); toast(p.id ? 'Proje güncellendi' : 'Proje açıldı: ' + r.item.kod); if (!p.id && st.view === 'teklif') go('proje'); else render(); });
         }
       });
   }
@@ -862,13 +889,14 @@
       fld('Ekip', '<input id="s-ekip" value="' + esc(s.ekip) + '" list="dl-ekip" placeholder="Ad, ad"><datalist id="dl-ekip">' + B.users.map(function (u) { return '<option value="' + esc(u.ad) + '">'; }).join('') + '</datalist>') +
       fld('Tarih', '<input id="s-tarih" type="date" required value="' + esc(s.tarih) + '">') +
       fld('Saat', '<input id="s-saat" type="time" value="' + esc(s.saat) + '">') +
-      fld('Durum', '<select id="s-durum">' + opt([['planli', 'Planlı'], ['tamamlandi', 'Tamamlandı'], ['iptal', 'İptal']], s.durum) + '</select>') + '</div>',
+      fld('Durum', '<select id="s-durum">' + opt([['planli', 'Planlı'], ['tamamlandi', 'Tamamlandı'], ['iptal', 'İptal']], s.durum) + '</select>') + hatFields('saha', s.id, 'gun09') + '</div>',
       {
         del: s.id && can('rego_sil') ? function () { return api('saha/' + s.id, 'DELETE').then(function () { drop('saha', s.id); toast('Ziyaret silindi'); render(); }); } : null,
         submit: function () {
           if (!val('s-is') || !val('s-tarih')) { toast('İş tanımı ve tarih gerekli.', true); return false; }
-          var body = { is_tanimi: val('s-is'), musteri_id: +val('s-mus'), proje_id: +val('s-pro'), konum: val('s-konum'), ekip: val('s-ekip'), tarih: val('s-tarih'), saat: val('s-saat'), durum: val('s-durum') };
-          return api(s.id ? 'saha/' + s.id : 'saha', s.id ? 'PUT' : 'POST', body).then(function (r) { upsert('saha', r.item); toast(s.id ? 'Ziyaret güncellendi' : 'Ziyaret planlandı'); render(); });
+          var body = { is_tanimi: val('s-is'), musteri_id: +val('s-mus'), proje_id: +val('s-pro'), konum: val('s-konum'), ekip: val('s-ekip'), tarih: val('s-tarih'), saat: val('s-saat'), durum: val('s-durum'), hatirlatma: hatVal() };
+          if (body.hatirlatma && body.hatirlatma.kural !== 'yok' && !body.hatirlatma.alicilar.length) { toast('Hatırlatma için en az bir kişi seçin.', true); return false; }
+          return api(s.id ? 'saha/' + s.id : 'saha', s.id ? 'PUT' : 'POST', body).then(function (r) { hatSync(r); upsert('saha', r.item); toast(s.id ? 'Ziyaret güncellendi' : 'Ziyaret planlandı'); render(); });
         }
       });
   }
@@ -916,17 +944,18 @@
       (gelir ? fld('Müşteri (isteğe bağlı)', '<select id="h-mus">' + musteriOpts(h.musteri_id, 'Müşteri yok') + '</select>') : '') +
       fld('Tekrar', '<select id="h-tekrar">' + opt([['yok', 'Tekrarlamaz'], ['aylik', 'Her ay'], ['yillik', 'Her yıl']], h.tekrar) + '</select>') +
       '<p class="hint full" style="margin:-4px 0 0">Tekrarlayan kayıt ödendi olarak işaretlenince bir sonraki dönemin ödemesi kendiliğinden eklenir.</p>' +
-      fld('Not', '<textarea id="h-not" data-auto rows="2">' + esc(h.notlar || '') + '</textarea>', 'full') + '</div>',
+      fld('Not', '<textarea id="h-not" data-auto rows="2">' + esc(h.notlar || '') + '</textarea>', 'full') + hatFields('hareket', h.id, gelir ? 'yok' : 'gun09') +
+      '<p class="hint full" style="margin:-6px 0 0">Hatırlatma yalnızca ödeme bekleyen kayıtlarda gönderilir; ödendi işaretlenince iptal olur.</p></div>',
       {
         del: !isNew && can('rego_sil') ? function () { return api('hareket/' + h.id, 'DELETE').then(function () { drop('hareket', h.id); toast('Kayıt silindi'); render(); }); } : null,
         submit: function () {
           var tutar = parseNum(val('h-tutar'));
           if (!(tutar > 0)) { toast('Tutarı girin.', true); return false; }
           if (!val('h-acik') && !val('h-kat')) { toast('Açıklama ya da kategori girin.', true); return false; }
-          var body = { tur: gelir ? 'gelir' : 'gider', aciklama: val('h-acik'), tutar: tutar, para: val('h-para'), kategori: val('h-kat'), tarih: val('h-tarih'), durum: val('h-durum'), hesap: val('h-hesap'), musteri_id: gelir ? +val('h-mus') : 0, tekrar: val('h-tekrar'), notlar: val('h-not') };
+          var body = { hatirlatma: hatVal(), tur: gelir ? 'gelir' : 'gider', aciklama: val('h-acik'), tutar: tutar, para: val('h-para'), kategori: val('h-kat'), tarih: val('h-tarih'), durum: val('h-durum'), hesap: val('h-hesap'), musteri_id: gelir ? +val('h-mus') : 0, tekrar: val('h-tekrar'), notlar: val('h-not') };
           if (body.durum === 'odendi' && h.durum !== 'odendi') body.odeme_tarihi = body.tarih <= today() ? body.tarih : today();
           return api(isNew ? 'hareket' : 'hareket/' + h.id, isNew ? 'POST' : 'PUT', body).then(function (r) {
-            upsert('hareket', r.item); if (r.extra) upsert('hareket', r.extra);
+            hatSync(r); upsert('hareket', r.item); if (r.extra) upsert('hareket', r.extra);
             toast(r.extra ? 'Kaydedildi. Sonraki ödeme ' + fmtD(r.extra.tarih) + ' için eklendi.' : (isNew ? 'Kayıt eklendi' : 'Kayıt güncellendi'));
             if (st.view === 'fatura') st.tab.finans = 'kasa';
             render();
@@ -940,6 +969,116 @@
       var sync = function () { if (!touched) ds.value = val('h-tarih') > today() ? 'bekliyor' : 'odendi'; };
       $('#h-tarih').addEventListener('change', sync); $('#h-tarih').addEventListener('input', sync);
     }
+  }
+
+  /* ---------- reminders ---------- */
+  var HAT_KURAL = {
+    saha: [['yok', 'Hatırlatma yok'], ['gun09', 'Aynı gün 09:00'], ['saat1', '1 saat önce'], ['gun1', '1 gün önce 09:00'], ['ozel', 'Tarih ve saat seç']],
+    hareket: [['yok', 'Hatırlatma yok'], ['gun09', 'Son gün 09:00'], ['gun1', '1 gün önce 09:00'], ['gun3', '3 gün önce 09:00'], ['ozel', 'Tarih ve saat seç']],
+    proje: [['yok', 'Hatırlatma yok'], ['gun09', 'Teslim günü 09:00'], ['gun1', '1 gün önce 09:00'], ['gun3', '3 gün önce 09:00'], ['ozel', 'Tarih ve saat seç']]
+  };
+  function hatFor(k, id) {
+    if (!id) return null;
+    var l = (B.hatirlatma || []).filter(function (h) { return h.kaynak === k && h.kaynak_id === id && h.durum !== 'iptal'; });
+    return l.length ? l[l.length - 1] : null;
+  }
+  function fmtDT(s) { if (!s) return ''; var d = new Date(String(s).replace(' ', 'T')); return d.getDate() + ' ' + AY[d.getMonth()] + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  function aktifKullanicilar() { return B.users.filter(function (u) { return u.rol !== 'pasif'; }); }
+  function alicilarHtml(sel) {
+    sel = (sel && sel.length) ? sel : [B.me.id];
+    return '<div class="alicilar">' + aktifKullanicilar().map(function (u) {
+      return '<label class="check" for="hat-u' + u.id + '"><input type="checkbox" id="hat-u' + u.id + '" class="hat-u" value="' + u.id + '"' + (sel.indexOf(u.id) > -1 ? ' checked' : '') + '> ' + esc(displayName(u)) + '</label>';
+    }).join('') + '</div>';
+  }
+  function alicilarVal() { return $$('.hat-u').filter(function (c) { return c.checked; }).map(function (c) { return +c.value; }); }
+  function hatFields(k, id, defKural) {
+    var h = hatFor(k, id);
+    var kural = h ? h.kural : (id ? 'yok' : defKural);
+    var zaman = h ? String(h.zaman).slice(0, 16).replace(' ', 'T') : addDays(today(), 1) + 'T09:00';
+    var durum = h ? (h.durum === 'gonderildi' ? '<span class="chip c-ok">Gönderildi · ' + esc(fmtDT(h.gonderim || h.zaman)) + '</span>' : '<span class="chip c-info">' + esc(fmtDT(h.zaman)) + '</span>') : '';
+    return '<div class="full hat"><div class="row" style="justify-content:space-between"><h3>Hatırlatma</h3>' + durum + '</div><div class="form">' +
+      fld('Ne zaman', '<select id="hat-kural">' + opt(HAT_KURAL[k], kural) + '</select>') +
+      '<label class="f" for="hat-zaman"' + (kural === 'ozel' ? '' : ' hidden') + ' id="hat-zaman-w">Tarih ve saat<input id="hat-zaman" type="datetime-local" value="' + esc(zaman) + '"></label>' +
+      '<div class="full"><span class="hint">Kimlere gitsin</span>' + alicilarHtml(h ? h.alicilar : null) + '</div></div></div>';
+  }
+  function hatBind() {
+    var k = $('#hat-kural'); if (!k) return;
+    k.addEventListener('change', function () { $('#hat-zaman-w').hidden = k.value !== 'ozel'; });
+  }
+  function hatVal() {
+    var k = $('#hat-kural'); if (!k) return undefined;
+    return { kural: k.value, zaman: val('hat-zaman'), alicilar: alicilarVal() };
+  }
+  function hatSync(r) { if (r && r.hatirlatma) B.hatirlatma = r.hatirlatma; }
+
+  function hatModal(h) {
+    var isNew = !h;
+    h = h || { baslik: '', mesaj: '', zaman: addDays(today(), 1) + ' 09:00:00', alicilar: [B.me.id] };
+    modal(isNew ? 'Hatırlatma ekle' : 'Hatırlatma',
+      '<div class="form">' +
+      fld('Başlık', '<input id="g-baslik" value="' + esc(h.baslik) + '" placeholder="Örn. Kazani Otomotiv ile görüşme">', 'full') +
+      fld('Tarih ve saat', '<input id="g-zaman" type="datetime-local" value="' + esc(String(h.zaman).slice(0, 16).replace(' ', 'T')) + '">') +
+      '<div></div>' +
+      fld('Not', '<textarea id="g-not" data-auto rows="2" placeholder="Görüşmede konuşulacaklar, adres, telefon…">' + esc(h.mesaj || '') + '</textarea>', 'full') +
+      '<div class="full"><span class="hint">Kimlere gitsin</span>' + alicilarHtml(h.alicilar) + '</div>' +
+      (h.durum === 'gonderildi' ? '<p class="hint full" style="margin:0">Bu hatırlatma ' + esc(fmtDT(h.gonderim)) + ' tarihinde gönderildi. Tarihi değiştirip kaydederseniz yeniden gönderilir.</p>' : '') + '</div>',
+      {
+        del: !isNew && (h.created_by === B.me.id || can('rego_sil')) ? function () { return api('hatirlatma/' + h.id, 'DELETE').then(function () { B.hatirlatma = (B.hatirlatma || []).filter(function (x) { return x.id !== h.id; }); toast('Hatırlatma silindi'); render(); }); } : null,
+        submit: function () {
+          if (!val('g-baslik') || !val('g-zaman')) { toast('Başlık ile tarih ve saat gerekli.', true); return false; }
+          if (!alicilarVal().length) { toast('En az bir kişi seçin.', true); return false; }
+          return api(isNew ? 'hatirlatma' : 'hatirlatma/' + h.id, isNew ? 'POST' : 'PUT', { baslik: val('g-baslik'), mesaj: val('g-not'), zaman: val('g-zaman'), alicilar: alicilarVal() })
+            .then(function (r) { hatSync(r); toast('Hatırlatma ' + fmtDT(r.item.zaman) + ' için kuruldu'); render(); });
+        }
+      });
+  }
+  function hatAc(h) {
+    if (h.kaynak === 'genel') return hatModal(h);
+    if (h.kaynak === 'saha') { var s = byId('saha', h.kaynak_id); if (s && can('rego_saha_edit')) return sahaModal(s); return go('saha'); }
+    if (h.kaynak === 'hareket') { var x = byId('hareket', h.kaynak_id); if (x) return hareketModal(null, x); return go('fatura'); }
+    if (h.kaynak === 'proje') { var p = byId('proje', h.kaynak_id); if (p && can('rego_proje_edit')) return projeModal(p); return go('proje'); }
+  }
+
+  /* ---------- notifications (bell) ---------- */
+  function bilApply(p) {
+    if (!p) return;
+    var prev = B.bildirim || { items: [] };
+    var seen = st.bilMax || 0;
+    B.bildirim = p; if (p.hatirlatma) B.hatirlatma = p.hatirlatma;
+    var n = $('#bell-n'); if (n) { n.textContent = p.okunmamis > 9 ? '9+' : p.okunmamis; n.hidden = !p.okunmamis; }
+    var max = p.items.reduce(function (m, i) { return Math.max(m, i.id); }, 0);
+    if (st.bilMax != null) {
+      p.items.filter(function (i) { return i.id > seen && !i.okundu; }).reverse().forEach(function (i) {
+        toast('Hatırlatma: ' + i.baslik);
+        try {
+          if (window.Notification && Notification.permission === 'granted') {
+            var nt = new Notification(i.baslik, { body: i.mesaj || '', icon: C.logo.replace('logo.png', 'icon.png'), tag: 'rego-' + i.id });
+            nt.onclick = function () { window.focus(); bilOku([i.id]); go(i.link || 'dash'); nt.close(); };
+          }
+        } catch (e) {}
+      });
+    }
+    st.bilMax = Math.max(seen, max);
+    void prev;
+    if (st.menu && st.menu.classList.contains('bellmenu')) st.menu.innerHTML = bellHtml();
+  }
+  function bilPoll() { api('bildirim').then(bilApply).catch(function () {}); }
+  function bilOku(ids, hepsi) { return api('bildirim/okundu', 'POST', hepsi ? { hepsi: 1 } : { ids: ids }).then(bilApply).catch(fail); }
+  function ago(s) {
+    var ref = B.bildirim && B.bildirim.simdi ? new Date(String(B.bildirim.simdi).replace(' ', 'T')).getTime() : Date.now();
+    var d = (ref - new Date(String(s).replace(' ', 'T')).getTime()) / 60000;
+    if (d < 1) return 'şimdi'; if (d < 60) return Math.round(d) + ' dk önce'; if (d < 1440) return Math.round(d / 60) + ' saat önce';
+    return fmtDT(s);
+  }
+  function bellHtml() {
+    var p = B.bildirim || { items: [], okunmamis: 0 };
+    var perm = window.Notification ? Notification.permission : 'unsupported';
+    return '<div class="bell-h"><b>Bildirimler</b>' + (p.okunmamis ? '<button type="button" class="btn sm ghost" data-act="bil-hepsi">Tümünü okundu say</button>' : '') + '</div>' +
+      '<div class="bell-l">' + (p.items.map(function (i) {
+        return '<button type="button" class="bil-i' + (i.okundu ? '' : ' yeni') + '" data-act="bil-ac" data-id="' + i.id + '" data-link="' + esc(i.link) + '"><i class="dot"></i><span><b>' + esc(i.baslik) + '</b><small>' + esc(i.mesaj || '') + '</small><small class="muted">' + esc(ago(i.created_at)) + '</small></span></button>';
+      }).join('') || '<p class="empty small" style="padding:18px 8px"><b>Henüz bildirim yok.</b>Kurduğunuz hatırlatmalar zamanı gelince burada görünür.</p>') + '</div>' +
+      '<div class="bell-f">' + (perm === 'default' ? '<button type="button" class="btn sm" data-act="bil-izin">Masaüstü bildirimlerini aç</button>' : perm === 'denied' ? '<span class="hint">Masaüstü bildirimleri tarayıcıda engelli.</span>' : '') +
+      '<button type="button" class="btn sm primary" data-act="hat-new">+ Hatırlatma</button></div>';
   }
 
   function profilModal() {
@@ -1066,6 +1205,17 @@
         var only = dayEvents(a.dataset.d);
         if (only.length === 1 && e.detail > 0 && window.matchMedia('(hover: hover)').matches) { var o = only[0]; hideCalPop(true); if (o.act) { var fake = document.createElement('button'); fake.dataset.act = o.act; fake.dataset.id = o.id; document.body.appendChild(fake); fake.click(); fake.remove(); } else go(o.go); }
         break;
+      case 'bell':
+        if (st.menu && st.menu.classList.contains('bellmenu')) { closeMenu(); break; }
+        openMenu(a, bellHtml()); st.menu.classList.add('bellmenu'); bilPoll();
+        break;
+      case 'bil-ac': var lk = a.dataset.link; closeMenu(); bilOku([id]); go(lk || 'dash'); break;
+      case 'bil-hepsi': bilOku(null, true); break;
+      case 'bil-izin':
+        try { Notification.requestPermission().then(function (p) { toast(p === 'granted' ? 'Masaüstü bildirimleri açıldı' : 'Masaüstü bildirimlerine izin verilmedi', p !== 'granted'); if (st.menu) st.menu.innerHTML = bellHtml(); }); } catch (er) { fail(er); }
+        break;
+      case 'hat-new': closeMenu(); hatModal(); break;
+      case 'hat-edit': var hh = (B.hatirlatma || []).find(function (x) { return x.id === id; }); if (hh) hatAc(hh); break;
       case 'open-drawer': $('#rail').classList.add('open'); $('#scrim').classList.add('open'); break;
       case 'close-drawer': $('#rail').classList.remove('open'); $('#scrim').classList.remove('open'); break;
       case 'user-menu':
@@ -1074,12 +1224,12 @@
         break;
       case 'new-menu':
         if (st.menu) { closeMenu(); break; }
-        openMenu(a, [['musteri', 'Müşteri', 'rego_musteri_edit'], ['teklif', 'Fiyat teklifi', 'rego_teklif'], ['proje', 'Proje', 'rego_proje_edit'], ['saha', 'Saha ziyareti', 'rego_saha_edit'], ['fatura', 'Fatura kaydı', 'rego_fatura'], ['gelir', 'Gelir (faturasız ödeme)', 'rego_kasa'], ['gider', 'Gider / ödeme (kira vb.)', 'rego_kasa']]
+        openMenu(a, [['musteri', 'Müşteri', 'rego_musteri_edit'], ['teklif', 'Fiyat teklifi', 'rego_teklif'], ['proje', 'Proje', 'rego_proje_edit'], ['saha', 'Saha ziyareti', 'rego_saha_edit'], ['fatura', 'Fatura kaydı', 'rego_fatura'], ['gelir', 'Gelir (faturasız ödeme)', 'rego_kasa'], ['gider', 'Gider / ödeme (kira vb.)', 'rego_kasa'], ['hatirlatma', 'Hatırlatma', 'rego_access']]
           .filter(function (x) { return can(x[2]); }).map(function (x) { return '<button type="button" data-act="new" data-k="' + x[0] + '">' + x[1] + '</button>'; }).join(''));
         break;
       case 'new':
         closeMenu();
-        ({ musteri: function () { musteriModal(); }, teklif: function () { go('teklif/yeni'); }, proje: function () { projeModal(); }, saha: function () { sahaModal(); }, fatura: function () { faturaModal(); }, gelir: function () { hareketModal('gelir'); }, gider: function () { hareketModal('gider'); } })[a.dataset.k]();
+        ({ musteri: function () { musteriModal(); }, teklif: function () { go('teklif/yeni'); }, proje: function () { projeModal(); }, saha: function () { sahaModal(); }, fatura: function () { faturaModal(); }, gelir: function () { hareketModal('gelir'); }, gider: function () { hareketModal('gider'); }, hatirlatma: function () { hatModal(); } })[a.dataset.k]();
         break;
       case 'profil': closeMenu(); profilModal(); break;
       case 'tab': st.tab[a.dataset.k] = a.dataset.v; render(); break;
@@ -1092,18 +1242,18 @@
       case 'proje-adv':
         var p = byId('proje', id); var si = STAGES.findIndex(function (s) { return s[0] === p.asama; });
         var next = STAGES[Math.min(si + 1, 3)];
-        api('proje/' + id, 'PUT', { asama: next[0] }).then(function (r) { upsert('proje', r.item); render(); toast(p.kod + ' → ' + next[1]); }).catch(fail);
+        api('proje/' + id, 'PUT', { asama: next[0] }).then(function (r) { hatSync(r); upsert('proje', r.item); render(); toast(p.kod + ' → ' + next[1]); }).catch(fail);
         break;
       case 'saha-new': sahaModal(); break;
       case 'saha-edit': sahaModal(byId('saha', id)); break;
-      case 'saha-done': api('saha/' + id, 'PUT', { durum: 'tamamlandi' }).then(function (r) { upsert('saha', r.item); render(); toast('Ziyaret tamamlandı'); }).catch(fail); break;
+      case 'saha-done': api('saha/' + id, 'PUT', { durum: 'tamamlandi' }).then(function (r) { hatSync(r); upsert('saha', r.item); render(); toast('Ziyaret tamamlandı'); }).catch(fail); break;
       case 'fatura-new': faturaModal(); break;
       case 'hareket-new': hareketModal(a.dataset.tur); break;
       case 'hareket-edit': hareketModal(null, byId('hareket', id)); break;
       case 'fin-kasa': st.tab.finans = 'kasa'; go('fatura'); break;
       case 'hareket-ode':
         api('hareket/' + id, 'PUT', { durum: 'odendi', odeme_tarihi: today() }).then(function (r) {
-          upsert('hareket', r.item); if (r.extra) upsert('hareket', r.extra); render();
+          hatSync(r); upsert('hareket', r.item); if (r.extra) upsert('hareket', r.extra); render();
           toast(r.extra ? 'Ödendi. Sonraki ödeme ' + fmtD(r.extra.tarih) + ' için eklendi.' : 'Ödendi olarak kaydedildi');
         }).catch(fail);
         break;
@@ -1209,6 +1359,11 @@
           if (r.updated) setTimeout(function () { location.reload(); }, 1500);
         }).catch(function (er) { a.disabled = false; $('#upd-msg').textContent = er.message; fail(er); });
         break;
+      case 'wa-test':
+        a.disabled = true; $('#wa-sonuc').textContent = 'Kaydediliyor ve gönderiliyor…';
+        saveSettings().then(function () { return api('whatsapp-test', 'POST', {}); }).then(function (r) { toast('Sonuç: ' + r.sonuc); var w = $('#wa-sonuc'); if (w) w.textContent = r.sonuc; })
+          .catch(function (er) { fail(er); var w = $('#wa-sonuc'); if (w) w.textContent = er.message; }).then(function () { a.disabled = false; });
+        break;
       case 'hz-add': st.forms.S.hazirlayanlar = st.forms.S.hazirlayanlar || []; st.forms.S.hazirlayanlar.push({ ad: '', email: '', tel: '' }); st.dirty = true; render(); var hi = document.getElementById('hz' + (st.forms.S.hazirlayanlar.length - 1) + 'a'); if (hi) hi.focus(); break;
       case 'hz-del': st.forms.S.hazirlayanlar.splice(i, 1); st.dirty = true; render(); break;
       case 'sb-edit': sablonModal(i); break;
@@ -1245,6 +1400,9 @@
     api('bootstrap').then(function (b) {
       B = b;
       shell(); bindShell();
+      st.bilMax = null; bilApply(b.bildirim); 
+      setInterval(bilPoll, 60000);
+      document.addEventListener('visibilitychange', function () { if (!document.hidden) bilPoll(); });
       document.addEventListener('click', onClick);
       document.addEventListener('input', onInput);
       document.addEventListener('change', onChange);

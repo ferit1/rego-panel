@@ -272,3 +272,29 @@ label.f textarea,textarea.inp{resize:vertical;line-height:1.5}
 }
 @media (max-width:440px){.kpis{grid-template-columns:minmax(0,1fr)}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---------- bell & reminders ---------- */
+.bellw{position:relative}
+.bell{width:38px;height:38px;position:relative;color:var(--fg)}
+.badge{position:absolute;top:2px;right:1px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--bad);color:#fff;font-size:10.5px;font-weight:700;display:grid;place-items:center;line-height:1}
+.menu.bellmenu{width:360px;max-width:calc(100vw - 24px);padding:0;gap:0;right:-8px}
+.bell-h{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.bell-h b{font-family:var(--f-display);font-size:14px}
+.menu.bellmenu .bell-h .btn,.menu.bellmenu .bell-f .btn{box-sizing:border-box;padding:5px 10px;border-radius:8px;font-weight:600;font-size:12.5px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+.menu.bellmenu .bell-h .btn.ghost{border-color:transparent;color:var(--muted)}
+.menu.bellmenu .bell-f .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.bell-l{max-height:380px;overflow-y:auto;padding:4px}
+.menu .bil-i{display:grid!important;grid-template-columns:8px minmax(0,1fr);gap:10px;padding:10px!important;border-radius:8px;align-items:start}
+.bil-i .dot{width:8px;height:8px;margin-top:6px;background:transparent}
+.bil-i.yeni .dot{background:var(--accent)}
+.bil-i b{display:block;font-size:13px;font-weight:700}
+.bil-i small{display:block;font-size:12px;color:var(--muted);font-weight:500;margin-top:1px}
+.bil-i:not(.yeni) b{font-weight:600;color:var(--muted)}
+.bell-f{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:10px 12px;border-top:1px solid var(--line);flex-wrap:wrap}
+.hat{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:10px}
+.alicilar{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:6px}
+.li.hat-li{all:unset;box-sizing:border-box;display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 6px;border-bottom:1px solid var(--line);cursor:pointer;border-radius:8px}
+.li.hat-li:hover{background:var(--surface-2)}
+.li.hat-li:last-child{border-bottom:0}
+.hat-li .t,.hat-li .m{display:block}
+.d-hat{background:var(--bad)}

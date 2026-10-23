@@ -208,6 +208,13 @@ function rego_panel_register_routes() {
 	) );
 }
 
+/** Settings as sent to the browser: the WhatsApp access token never leaves the server. */
+function rego_settings_public( $s ) {
+	$s['wa_token_var'] = ! empty( $s['wa_token'] );
+	$s['wa_token']     = '';
+	return $s;
+}
+
 function rego_panel_users() {
 	$users  = get_users( array( 'role__in' => array( 'administrator', 'rego_yonetici', 'rego_satis', 'rego_saha' ), 'orderby' => 'display_name' ) );
 	$pasif  = get_users( array( 'meta_key' => 'rego_pasif', 'meta_value' => '1', 'role' => 'subscriber' ) );
@@ -240,7 +247,7 @@ function rego_api_bootstrap() {
 		'me'       => rego_user_public( wp_get_current_user() ),
 		'caps'     => rego_user_caps(),
 		'users'    => rego_panel_users(),
-		'settings' => current_user_can( 'rego_teklif' ) || current_user_can( 'rego_ayarlar' ) ? $s : array(
+		'settings' => current_user_can( 'rego_teklif' ) || current_user_can( 'rego_ayarlar' ) ? rego_settings_public( $s ) : array(
 			'birimler' => $s['birimler'], 'hizmetler' => $s['hizmetler'], 'firma_unvan' => $s['firma_unvan'],
 		),
 		'data'     => $data,
@@ -250,6 +257,8 @@ function rego_api_bootstrap() {
 		'logout'   => wp_logout_url( rego_panel_url() ),
 		'admin'    => current_user_can( 'manage_options' ) ? admin_url() : '',
 		'version'  => REGO_PANEL_VERSION,
+		'hatirlatma' => rego_hat_list(),
+		'bildirim' => rego_bildirim_payload(),
 	);
 }
 
@@ -353,6 +362,11 @@ function rego_api_save( $type, $id, WP_REST_Request $req ) {
 			$out['extra'] = $next;
 		}
 	}
+	if ( in_array( $type, array( 'saha', 'hareket', 'proje' ), true ) ) {
+		$hr = isset( $params['hatirlatma'] ) && is_array( $params['hatirlatma'] ) ? $params['hatirlatma'] : null;
+		rego_hat_kaydet_kayit( $type, $out['item'], $hr );
+		$out['hatirlatma'] = rego_hat_list();
+	}
 	if ( 'teklif' === $type ) {
 		$out['musteri'] = rego_api_get( 'musteri', $out['item']['musteri_id'] );
 	}
@@ -376,12 +390,17 @@ function rego_hareket_tekrarla( $h ) {
 	) );
 	$nid = (int) $wpdb->insert_id;
 	$wpdb->update( rego_t( 'hareket' ), array( 'sonraki_id' => $nid ), array( 'id' => (int) $h['id'] ) );
+	$prev = rego_hat_get_for( 'hareket', (int) $h['id'] );
+	if ( $prev && 'ozel' !== $prev['kural'] ) {
+		rego_hat_kaydet_kayit( 'hareket', rego_api_get( 'hareket', $nid ), array( 'kural' => $prev['kural'], 'alicilar' => $prev['alicilar'] ) );
+	}
 	return rego_api_get( 'hareket', $nid );
 }
 
 function rego_api_delete( $type, $id ) {
 	global $wpdb;
 	$wpdb->delete( rego_t( $type ), array( 'id' => $id ) );
+	$wpdb->delete( rego_t( 'hatirlatma' ), array( 'kaynak' => $type, 'kaynak_id' => $id, 'durum' => 'bekliyor' ) );
 	return array( 'deleted' => $id );
 }
 
@@ -455,8 +474,22 @@ function rego_api_ayarlar( WP_REST_Request $req ) {
 		}
 		$s['hazirlayanlar'] = $h;
 	}
+	foreach ( array( 'wa_phone_id', 'wa_sablon', 'wa_dil', 'wa_surum' ) as $k ) {
+		if ( isset( $p[ $k ] ) ) {
+			$s[ $k ] = sanitize_text_field( $p[ $k ] );
+		}
+	}
+	if ( isset( $p['wa_aktif'] ) ) {
+		$s['wa_aktif'] = empty( $p['wa_aktif'] ) ? 0 : 1;
+	}
+	if ( ! empty( $p['wa_token'] ) ) {
+		$s['wa_token'] = trim( sanitize_text_field( $p['wa_token'] ) );
+	}
+	if ( ! empty( $p['wa_token_sil'] ) ) {
+		$s['wa_token'] = '';
+	}
 	update_option( 'rego_panel_settings', $s, false );
-	return array( 'settings' => $s );
+	return array( 'settings' => rego_settings_public( $s ) );
 }
 
 function rego_clean_sablonlar( $list ) {
