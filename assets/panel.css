@@ -316,3 +316,11 @@ label.f textarea,textarea.inp{resize:vertical;line-height:1.5}
 .gal-add:focus-within{outline:2px solid var(--accent)}
 .yeni-mus{border:1px dashed var(--accent);background:var(--accent-soft);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px}
 .yeni-mus label.f input,.yeni-mus label.f select{background:var(--surface)}
+
+/* ---------- shipments ---------- */
+.yon{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.y-gelen{background:var(--ok-soft);color:var(--ok)}
+.y-giden{background:var(--accent-soft);color:var(--accent)}
+.kteslim{grid-template-columns:repeat(3,minmax(0,1fr));padding:10px;border-radius:10px;background:var(--ok-soft)}
+.d-kargo{background:#8A63D2}
+@media (max-width:760px){.kteslim{grid-template-columns:minmax(0,1fr)}}

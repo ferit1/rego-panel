@@ -101,12 +101,13 @@
     proje: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z"/><path d="M3 12l9 4.5 9-4.5M3 16.5 12 21l9-4.5"/></svg>',
     fatura: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5v.01M17.5 14.5v.01"/></svg>',
     saha: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
+    kargo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3 8 9 5 9-5M12 13v8M7.5 5.5l9 5"/></svg>',
     kullanici: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 4 6v5c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>',
     ayarlar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>'
   };
   var NAV = [
     ['dash', 'Ana Panel', 'rego_access'], ['musteri', 'Müşteriler', 'rego_access'], ['teklif', 'Teklifler', 'rego_teklif'],
-    ['proje', 'Projeler', 'rego_access'], ['fatura', 'Finans', 'rego_access'], ['saha', 'Saha', 'rego_access'],
+    ['proje', 'Projeler', 'rego_access'], ['fatura', 'Finans', 'rego_access'], ['saha', 'Saha', 'rego_access'], ['kargo', 'Kargo', 'rego_access'],
     ['kullanici', 'Kullanıcılar', 'rego_kullanici'], ['ayarlar', 'Ayarlar', 'rego_ayarlar']
   ];
 
@@ -194,13 +195,19 @@
       if (h.kaynak !== 'genel' || h.durum === 'iptal' || String(h.zaman).slice(0, 10) !== ds) return;
       ev.push({ k: 'hat', t: 'Hatırlatma: ' + h.baslik, m: String(h.zaman).slice(11, 16) + (h.mesaj ? ' · ' + h.mesaj : ''), act: 'hat-edit', id: h.id, go: 'dash', done: h.durum === 'gonderildi' });
     });
+    list('kargo').forEach(function (k) {
+      var gun = k.durum === 'teslim' ? k.teslim_tarihi : k.tarih;
+      if (gun !== ds) return;
+      var ne = k.yon === 'gelen' ? (k.durum === 'teslim' ? 'Kargo teslim alındı' : 'Beklenen kargo') : (k.durum === 'bekliyor' ? 'Gönderilecek kargo' : k.durum === 'yolda' ? 'Kargo gönderildi' : 'Kargo teslim edildi');
+      ev.push({ k: 'kargo', t: ne + ': ' + kargoKarsi(k), m: [k.icerik, k.kargo_firma, k.takip_no].filter(Boolean).join(' · '), act: 'kargo-edit', id: k.id, go: 'kargo', done: k.durum === 'teslim' });
+    });
     list('fatura').forEach(function (f) {
       if (f.vade !== ds || f.odendi) return;
       ev.push({ k: 'fatura', t: 'Fatura vadesi: ' + firma(f.musteri_id), m: money(f.tutar, f.para) + (f.no ? ' · ' + f.no : ''), act: 'fatura-edit', id: f.id, go: 'fatura' });
     });
     return ev;
   }
-  var EV_KIND = { saha: 'Saha ziyareti', odeme: 'Ödeme / gelir', teslim: 'Proje teslimi', fatura: 'Fatura vadesi', hat: 'Hatırlatma' };
+  var EV_KIND = { saha: 'Saha ziyareti', odeme: 'Ödeme / gelir', teslim: 'Proje teslimi', fatura: 'Fatura vadesi', hat: 'Hatırlatma', kargo: 'Kargo' };
   function calendar(y, m) {
     var first = new Date(y, m, 1), off = (first.getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate();
     var pre = y + '-' + String(m + 1).padStart(2, '0') + '-';
@@ -248,7 +255,7 @@
     if (now) go(); else calTimer = setTimeout(go, 220);
   }
   function newMenu() {
-    var items = [['musteri', 'Müşteri', 'rego_musteri_edit'], ['teklif', 'Fiyat teklifi', 'rego_teklif'], ['proje', 'Proje', 'rego_proje_edit'], ['saha', 'Saha ziyareti', 'rego_saha_edit'], ['fatura', 'Fatura kaydı', 'rego_fatura'], ['gelir', 'Gelir (faturasız ödeme)', 'rego_kasa'], ['gider', 'Gider / ödeme (kira vb.)', 'rego_kasa'], ['hatirlatma', 'Hatırlatma', 'rego_access']];
+    var items = [['musteri', 'Müşteri', 'rego_musteri_edit'], ['teklif', 'Fiyat teklifi', 'rego_teklif'], ['proje', 'Proje', 'rego_proje_edit'], ['saha', 'Saha ziyareti', 'rego_saha_edit'], ['fatura', 'Fatura kaydı', 'rego_fatura'], ['gelir', 'Gelir (faturasız ödeme)', 'rego_kasa'], ['gider', 'Gider / ödeme (kira vb.)', 'rego_kasa'], ['hatirlatma', 'Hatırlatma', 'rego_access'], ['kargo-gelen', 'Gelen kargo', 'rego_access'], ['kargo-giden', 'Giden kargo', 'rego_access']];
     items = items.filter(function (x) { return can(x[2]); });
     if (!items.length) return '';
     return '<div class="row" style="position:relative"><button class="btn primary" type="button" data-act="new-menu" aria-haspopup="true">+ Yeni kayıt</button></div>';
@@ -313,11 +320,21 @@
     var now = new Date();
     var row3 = '<section class="grid2"><div class="panel"><div class="panel-h"><div><h2>Devam eden projeler</h2><p>Teslim tarihine göre</p></div><button class="btn sm" data-go="proje">Proje panosu</button></div><div class="tablewrap"><table class="t"><thead><tr><th>Kod</th><th>Proje</th><th>Aşama</th><th class="r">Teslim</th></tr></thead><tbody>' +
       (aktif.slice().sort(function (a, b) { return String(a.teslim || '9').localeCompare(String(b.teslim || '9')); }).slice(0, 8).map(function (p) { return '<tr><td class="mono">' + esc(p.kod) + '</td><td><div class="strong">' + esc(p.ad) + '</div><div class="small muted">' + esc(firma(p.musteri_id)) + ' · <span class="svc">' + esc(p.hizmet) + '</span></div></td><td>' + stageChip(p.asama) + '</td><td class="r num">' + fmtD(p.teslim) + '</td></tr>'; }).join('') || emptyRow(4, 'Aktif proje yok.')) +
-      '</tbody></table></div></div><div class="stack" style="gap:14px"><div class="panel"><div class="panel-h"><div><h2>' + AYU[now.getMonth()] + ' ' + now.getFullYear() + '</h2><p>Saha, ödeme, teslim ve vade günleri</p></div></div>' + calendar(now.getFullYear(), now.getMonth()) + '</div>' + hatPanel() + '</div></section>';
+      '</tbody></table></div></div><div class="panel"><div class="panel-h"><div><h2>' + AYU[now.getMonth()] + ' ' + now.getFullYear() + '</h2><p>Saha, ödeme, teslim, kargo ve vade günleri</p></div></div>' + calendar(now.getFullYear(), now.getMonth()) + '</div></section>' +
+      '<section class="grid2 even">' + kargoPanel() + hatPanel() + '</section>';
 
     return '<div class="head"><div><h1>' + hi + ', ' + esc(first) + '.</h1><p class="sub">' + subs.join(' · ') + '</p></div>' + newMenu() + '</div>' +
       '<section class="kpis">' + kpis + '</section><section class="grid2">' + left + right + '</section>' + row2 + row3;
   };
+  function kargoPanel() {
+    var ks = acikKargolar().slice(0, 6);
+    return '<div class="panel"><div class="panel-h"><div><h2>Kargolar</h2><p>Gelecek ve gönderilecek kargolar</p></div><div class="row"><button class="btn sm" type="button" data-act="kargo-new" data-yon="gelen">↓ Gelen</button><button class="btn sm" type="button" data-act="kargo-new" data-yon="giden">↑ Giden</button></div></div><div class="list">' +
+      (ks.map(function (k) {
+        return '<div class="li" style="grid-template-columns:auto minmax(0,1fr) auto"><span>' + yonChip(k) + '</span><div style="min-width:0"><div class="t">' + esc(kargoKarsi(k)) + '</div><div class="m">' + esc([k.icerik, k.kargo_firma, k.takip_no].filter(Boolean).join(' · ') || '—') + '</div></div>' +
+          '<div class="r"><div>' + kargoDurum(k) + '</div><div class="row" style="justify-content:flex-end;margin-top:4px"><span class="small muted num">' + fmtD(k.tarih) + '</span>' + kargoAksiyon(k) + '</div></div></div>';
+      }).join('') || '<p class="empty"><b>Açık kargo yok.</b>Gelen ya da giden kargoyu yukarıdaki düğmelerle ekleyin.</p>') +
+      '</div>' + (list('kargo').length ? '<div style="margin-top:8px"><button class="btn sm ghost" data-go="kargo">Tüm kargolar →</button></div>' : '') + '</div>';
+  }
   function hatPanel() {
     var mine = (B.hatirlatma || []).filter(function (h) { return h.durum === 'bekliyor' && (h.alicilar.indexOf(B.me.id) > -1 || h.created_by === B.me.id); })
       .sort(function (a, b) { return String(a.zaman).localeCompare(String(b.zaman)); }).slice(0, 6);
@@ -778,6 +795,126 @@
       '<div class="panel"><div class="panel-h"><h2>' + AYU[st.cal[1]] + ' ' + st.cal[0] + '</h2><div class="row"><button class="icon-btn" type="button" data-act="cal" data-d="-1" aria-label="Önceki ay">‹</button><button class="icon-btn" type="button" data-act="cal" data-d="1" aria-label="Sonraki ay">›</button></div></div>' + calendar(st.cal[0], st.cal[1]) + '</div></section>';
   };
 
+  /* ---------- shipments ---------- */
+  var KARGO_DURUM = {
+    gelen: [['bekliyor', 'Bekleniyor'], ['yolda', 'Yolda'], ['teslim', 'Teslim alındı']],
+    giden: [['bekliyor', 'Hazırlanıyor'], ['yolda', 'Gönderildi'], ['teslim', 'Teslim edildi']]
+  };
+  function kargoDurum(k) {
+    var lab = (KARGO_DURUM[k.yon].find(function (x) { return x[0] === k.durum; }) || [0, ''])[1];
+    if (k.durum === 'teslim') return chip('ok', lab);
+    if (k.durum === 'yolda') return chip('info', lab);
+    var gec = k.tarih && k.tarih < today();
+    return chip(gec ? 'bad' : 'warn', lab + (gec ? ' · gecikti' : ''));
+  }
+  function kargoKarsi(k) { return k.musteri_id ? firma(k.musteri_id) : (k.karsi || '—'); }
+  function yonChip(k) { return k.yon === 'gelen' ? '<span class="yon y-gelen" title="Gelen">↓ Gelen</span>' : '<span class="yon y-giden" title="Giden">↑ Giden</span>'; }
+  function kargoAksiyon(k) {
+    if (k.durum === 'teslim') return '';
+    if (k.yon === 'gelen') return '<button class="btn sm" type="button" data-act="kargo-teslim" data-id="' + k.id + '">Teslim alındı</button>';
+    if (k.durum === 'bekliyor') return '<button class="btn sm" type="button" data-act="kargo-gonder" data-id="' + k.id + '">Gönderildi</button>';
+    return '<button class="btn sm" type="button" data-act="kargo-teslim" data-id="' + k.id + '">Teslim edildi</button>';
+  }
+  function acikKargolar() {
+    return list('kargo').filter(function (k) { return k.durum !== 'teslim'; })
+      .sort(function (a, b) { return String(a.tarih || '9').localeCompare(String(b.tarih || '9')); });
+  }
+
+  VIEWS.kargo = function () {
+    var tab = st.tab.kargo || 'acik';
+    var all = list('kargo').filter(function (k) { return match([kargoKarsi(k), k.icerik, k.kargo_firma, k.takip_no, k.teslim_kisi, k.teslim_yeri].join(' ')); });
+    var g = {
+      acik: all.filter(function (k) { return k.durum !== 'teslim'; }).sort(function (a, b) { return String(a.tarih || '9').localeCompare(String(b.tarih || '9')); }),
+      gelen: all.filter(function (k) { return k.yon === 'gelen'; }),
+      giden: all.filter(function (k) { return k.yon === 'giden'; }),
+      tum: all
+    };
+    var A = list('kargo');
+    var sayac = function (f) { return A.filter(f).length; };
+    var tabs = [['acik', 'Açık'], ['gelen', 'Gelen'], ['giden', 'Giden'], ['tum', 'Tümü']];
+    return '<div class="head"><div><h1>Kargo</h1><p class="sub">Gelen ve giden kargolar: kimden, nereden, ne zaman teslim alındı ya da gönderildi.</p></div><div class="row">' +
+      '<button class="btn" type="button" data-act="kargo-new" data-yon="gelen">↓ Gelen kargo</button><button class="btn primary" type="button" data-act="kargo-new" data-yon="giden">↑ Giden kargo</button></div></div>' +
+      '<section class="panel"><div class="sums">' +
+      '<div><span class="lab">Gelecek kargo</span><b class="num">' + sayac(function (k) { return k.yon === 'gelen' && k.durum !== 'teslim'; }) + '</b></div>' +
+      '<div><span class="lab">Gönderilecek</span><b class="num">' + sayac(function (k) { return k.yon === 'giden' && k.durum === 'bekliyor'; }) + '</b></div>' +
+      '<div><span class="lab">Yolda (giden)</span><b class="num">' + sayac(function (k) { return k.yon === 'giden' && k.durum === 'yolda'; }) + '</b></div>' +
+      '<div><span class="lab">Bu ay teslim</span><b class="num">' + sayac(function (k) { return k.durum === 'teslim' && String(k.teslim_tarihi || '').slice(0, 7) === today().slice(0, 7); }) + '</b></div>' +
+      '</div></section>' +
+      '<div class="tabs" role="tablist">' + tabs.map(function (x) { return '<button class="tab" role="tab" type="button" data-act="tab" data-k="kargo" data-v="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">' + x[1] + ' (' + g[x[0]].length + ')</button>'; }).join('') + '</div>' +
+      '<section class="panel"><div class="tablewrap"><table class="t"><thead><tr><th>Yön</th><th>Kimden / Kime</th><th>İçerik</th><th>Kargo</th><th>Tarih</th><th>Durum</th><th>Teslim</th><th></th></tr></thead><tbody>' +
+      (g[tab].map(function (k) {
+        return '<tr class="click" data-act="kargo-edit" data-id="' + k.id + '"><td>' + yonChip(k) + '</td><td class="strong">' + esc(kargoKarsi(k)) + '</td><td>' + esc(k.icerik || '—') + '</td>' +
+          '<td>' + esc(k.kargo_firma || '—') + (k.takip_no ? '<div class="mono small muted">' + esc(k.takip_no) + '</div>' : '') + '</td>' +
+          '<td class="num">' + fmtD(k.tarih) + '</td><td>' + kargoDurum(k) + '</td>' +
+          '<td class="small">' + (k.durum === 'teslim' ? esc([fmtD(k.teslim_tarihi), k.teslim_yeri, k.teslim_kisi].filter(function (x) { return x && x !== '—'; }).join(' · ')) : '<span class="muted">—</span>') + '</td>' +
+          '<td class="r">' + kargoAksiyon(k) + '</td></tr>';
+      }).join('') || emptyRow(8, tab === 'acik' ? 'Açık kargo yok.' : 'Bu listede kargo yok.', ' Yukarıdaki düğmelerle gelen ya da giden kargo ekleyin.')) +
+      '</tbody></table></div></section>';
+  };
+
+  function kargoModal(yon, k) {
+    var s = B.settings, isNew = !k;
+    k = k || { yon: yon, musteri_id: 0, proje_id: 0, karsi: '', icerik: '', kargo_firma: '', takip_no: '', tarih: today(), durum: 'bekliyor', teslim_tarihi: '', teslim_yeri: '', teslim_kisi: '', ucret: '', odeme: '', notlar: '' };
+    var gelen = k.yon === 'gelen';
+    var karsi = k.musteri_id ? firma(k.musteri_id) : k.karsi;
+    modal(isNew ? (gelen ? 'Gelen kargo' : 'Giden kargo') : (gelen ? 'Gelen kargo' : 'Giden kargo') + (k.takip_no ? ' · ' + k.takip_no : ''),
+      '<datalist id="dl-mus">' + list('musteri').map(function (m) { return '<option value="' + esc(m.firma) + '">'; }).join('') + '</datalist>' +
+      '<datalist id="dl-kfirma">' + (s.kargo_firmalari || []).map(function (f) { return '<option value="' + esc(f) + '">'; }).join('') + '</datalist>' +
+      '<datalist id="dl-kyer"><option value="Ofis"><option value="Atölye"><option value="Kargo şubesi"><option value="Müşteriden elden"></datalist>' +
+      '<div class="form">' +
+      fld(gelen ? 'Kimden' : 'Kime', '<input id="k-karsi" list="dl-mus" value="' + esc(karsi) + '" placeholder="Müşteri ya da tedarikçi adı">') +
+      fld(gelen ? 'Ne geliyor' : 'Ne gidiyor', '<input id="k-icerik" value="' + esc(k.icerik) + '" placeholder="Örn. 12 adet döküm parça (tarama için)">') +
+      fld('Kargo firması', '<input id="k-firma" list="dl-kfirma" value="' + esc(k.kargo_firma) + '">') +
+      fld('Takip numarası', '<input id="k-takip" value="' + esc(k.takip_no) + '" autocomplete="off">') +
+      fld(gelen ? 'Beklenen tarih' : 'Gönderim tarihi', '<input id="k-tarih" type="date" value="' + esc(k.tarih || '') + '">') +
+      fld('Durum', '<select id="k-durum">' + opt(KARGO_DURUM[k.yon], k.durum) + '</select>') +
+      '<div class="full form kteslim"' + (k.durum === 'teslim' ? '' : ' hidden') + ' id="k-teslim-w">' +
+      fld(gelen ? 'Teslim alındığı tarih' : 'Teslim edildiği tarih', '<input id="k-ttarih" type="date" value="' + esc(k.teslim_tarihi || today()) + '">') +
+      (gelen ? fld('Nerede teslim alındı', '<input id="k-tyer" list="dl-kyer" value="' + esc(k.teslim_yeri) + '" placeholder="Ofis, atölye, kargo şubesi…">') +
+        fld('Teslim alan', '<input id="k-tkisi" list="dl-ekip" value="' + esc(k.teslim_kisi || (isNew ? displayName(B.me) : '')) + '">') : fld('Teslim alan (alıcı tarafı)', '<input id="k-tkisi" value="' + esc(k.teslim_kisi) + '">')) +
+      '</div>' +
+      (gelen ? '' : fld('Kargo ücreti', '<input id="k-ucret" inputmode="decimal" value="' + esc(k.ucret ? num(k.ucret) : '') + '" placeholder="₺">') +
+        fld('Ödeme', '<select id="k-odeme">' + opt([['', 'Seçin'], ['gonderici', 'Gönderici ödemeli (biz)'], ['alici', 'Alıcı ödemeli']], k.odeme) + '</select>')) +
+      fld('Proje (isteğe bağlı)', '<select id="k-pro">' + opt(list('proje').map(function (p) { return [p.id, p.kod + ' · ' + p.ad]; }), k.proje_id, 'Proje yok') + '</select>') +
+      fld('Not', '<textarea id="k-not" data-auto rows="2">' + esc(k.notlar || '') + '</textarea>', 'full') +
+      '<datalist id="dl-ekip">' + aktifKullanicilar().map(function (u) { return '<option value="' + esc(displayName(u)) + '">'; }).join('') + '</datalist></div>',
+      {
+        del: !isNew && can('rego_sil') ? function () { return api('kargo/' + k.id, 'DELETE').then(function () { drop('kargo', k.id); toast('Kargo kaydı silindi'); render(); }); } : null,
+        submit: function () {
+          if (!val('k-karsi') && !val('k-icerik')) { toast((gelen ? 'Kimden' : 'Kime') + ' ya da içerik girin.', true); return false; }
+          var m = list('musteri').find(function (x) { return lc(x.firma) === lc(val('k-karsi')); });
+          var teslim = val('k-durum') === 'teslim';
+          var body = { yon: k.yon, karsi: val('k-karsi'), musteri_id: m ? m.id : 0, icerik: val('k-icerik'), kargo_firma: val('k-firma'), takip_no: val('k-takip'), tarih: val('k-tarih'), durum: val('k-durum'),
+            teslim_tarihi: teslim ? (val('k-ttarih') || today()) : '', teslim_yeri: teslim && gelen ? val('k-tyer') : '', teslim_kisi: teslim ? val('k-tkisi') : '',
+            ucret: gelen ? 0 : parseNum(val('k-ucret')), odeme: gelen ? '' : val('k-odeme'), proje_id: +val('k-pro'), notlar: val('k-not') };
+          return api(isNew ? 'kargo' : 'kargo/' + k.id, isNew ? 'POST' : 'PUT', body).then(function (r) { upsert('kargo', r.item); toast(isNew ? 'Kargo kaydedildi' : 'Kargo güncellendi'); render(); });
+        }
+      });
+    $('#k-durum').addEventListener('change', function (e) { $('#k-teslim-w').hidden = e.target.value !== 'teslim'; });
+  }
+
+  function kargoHizliModal(k, mod) {
+    var gelen = k.yon === 'gelen';
+    var title = mod === 'gonder' ? 'Gönderildi olarak işaretle' : (gelen ? 'Teslim alındı' : 'Teslim edildi');
+    modal(title + ': ' + kargoKarsi(k),
+      '<datalist id="dl-kyer"><option value="Ofis"><option value="Atölye"><option value="Kargo şubesi"><option value="Müşteriden elden"></datalist>' +
+      '<datalist id="dl-ekip">' + aktifKullanicilar().map(function (u) { return '<option value="' + esc(displayName(u)) + '">'; }).join('') + '</datalist><div class="form">' +
+      (mod === 'gonder'
+        ? fld('Kargo firması', '<input id="q-firma" list="dl-kfirma" value="' + esc(k.kargo_firma) + '"><datalist id="dl-kfirma">' + (B.settings.kargo_firmalari || []).map(function (f) { return '<option value="' + esc(f) + '">'; }).join('') + '</datalist>') +
+          fld('Takip numarası', '<input id="q-takip" value="' + esc(k.takip_no) + '">') + fld('Gönderim tarihi', '<input id="q-tarih" type="date" value="' + today() + '">')
+        : fld('Tarih', '<input id="q-tarih" type="date" value="' + today() + '">') +
+          (gelen ? fld('Nerede teslim alındı', '<input id="q-yer" list="dl-kyer" value="Ofis">') + fld('Teslim alan', '<input id="q-kisi" list="dl-ekip" value="' + esc(displayName(B.me)) + '">') : fld('Teslim alan (alıcı tarafı)', '<input id="q-kisi">'))) +
+      '</div>',
+      {
+        ok: 'Kaydet',
+        submit: function () {
+          var body = mod === 'gonder' ? { durum: 'yolda', kargo_firma: val('q-firma'), takip_no: val('q-takip'), tarih: val('q-tarih') || today() }
+            : { durum: 'teslim', teslim_tarihi: val('q-tarih') || today(), teslim_yeri: gelen ? val('q-yer') : '', teslim_kisi: val('q-kisi') };
+          return api('kargo/' + k.id, 'PUT', body).then(function (r) { upsert('kargo', r.item); toast(title); render(); });
+        }
+      });
+  }
+
   VIEWS.kullanici = function () {
     var opts = [['rego_yonetici', 'Yönetici'], ['rego_satis', 'Satış'], ['rego_saha', 'Saha ekibi'], ['pasif', 'Pasif (giriş yapamaz)']];
     return '<div class="head"><div><h1>Kullanıcılar</h1><p class="sub">Panel kullanıcıları ve yetkileri</p></div><button class="btn primary" type="button" data-act="kullanici-new">+ Kullanıcı ekle</button></div>' +
@@ -837,6 +974,7 @@
       '<section class="panel"><h2 style="margin-bottom:14px">Listeler</h2><div class="form">' +
       fld('Birimler (virgülle ayırın)', '<input id="s-birim" data-bind="birimler" data-csv value="' + esc((S.birimler || []).join(', ')) + '">') +
       fld('Hizmet türleri (virgülle ayırın)', '<input id="s-hizmet" data-bind="hizmetler" data-csv value="' + esc((S.hizmetler || []).join(', ')) + '">') +
+      fld('Kargo firmaları (virgülle ayırın)', '<input id="s-kargo" data-bind="kargo_firmalari" data-csv value="' + esc((S.kargo_firmalari || []).join(', ')) + '">') +
       fld('Kişi görevleri (virgülle ayırın)', '<input id="s-gorev" data-bind="gorevler" data-csv value="' + esc((S.gorevler || []).join(', ')) + '">') +
       fld('Gider kategorileri (virgülle ayırın)', '<input id="s-gider" data-bind="gider_kategorileri" data-csv value="' + esc((S.gider_kategorileri || []).join(', ')) + '">') +
       fld('Gelir kategorileri (virgülle ayırın)', '<input id="s-gelir" data-bind="gelir_kategorileri" data-csv value="' + esc((S.gelir_kategorileri || []).join(', ')) + '">') +
@@ -1306,6 +1444,10 @@
         try { Notification.requestPermission().then(function (p) { toast(p === 'granted' ? 'Masaüstü bildirimleri açıldı' : 'Masaüstü bildirimlerine izin verilmedi', p !== 'granted'); if (st.menu) st.menu.innerHTML = bellHtml(); }); } catch (er) { fail(er); }
         break;
       case 'hat-new': closeMenu(); hatModal(); break;
+      case 'kargo-new': kargoModal(a.dataset.yon); break;
+      case 'kargo-edit': kargoModal(null, byId('kargo', id)); break;
+      case 'kargo-teslim': kargoHizliModal(byId('kargo', id), 'teslim'); break;
+      case 'kargo-gonder': kargoHizliModal(byId('kargo', id), 'gonder'); break;
       case 'gorsel-sil': st.forms.E.gorseller.splice(i, 1); st.dirty = true; rerenderEditorKeepFocus('e-firma'); break;
       case 'gorsel-sol': case 'gorsel-sag':
         var gs = st.forms.E.gorseller, gj = act === 'gorsel-sol' ? i - 1 : i + 1;
@@ -1330,12 +1472,12 @@
         break;
       case 'new-menu':
         if (st.menu) { closeMenu(); break; }
-        openMenu(a, [['musteri', 'Müşteri', 'rego_musteri_edit'], ['teklif', 'Fiyat teklifi', 'rego_teklif'], ['proje', 'Proje', 'rego_proje_edit'], ['saha', 'Saha ziyareti', 'rego_saha_edit'], ['fatura', 'Fatura kaydı', 'rego_fatura'], ['gelir', 'Gelir (faturasız ödeme)', 'rego_kasa'], ['gider', 'Gider / ödeme (kira vb.)', 'rego_kasa'], ['hatirlatma', 'Hatırlatma', 'rego_access']]
+        openMenu(a, [['musteri', 'Müşteri', 'rego_musteri_edit'], ['teklif', 'Fiyat teklifi', 'rego_teklif'], ['proje', 'Proje', 'rego_proje_edit'], ['saha', 'Saha ziyareti', 'rego_saha_edit'], ['fatura', 'Fatura kaydı', 'rego_fatura'], ['gelir', 'Gelir (faturasız ödeme)', 'rego_kasa'], ['gider', 'Gider / ödeme (kira vb.)', 'rego_kasa'], ['hatirlatma', 'Hatırlatma', 'rego_access'], ['kargo-gelen', 'Gelen kargo', 'rego_access'], ['kargo-giden', 'Giden kargo', 'rego_access']]
           .filter(function (x) { return can(x[2]); }).map(function (x) { return '<button type="button" data-act="new" data-k="' + x[0] + '">' + x[1] + '</button>'; }).join(''));
         break;
       case 'new':
         closeMenu();
-        ({ musteri: function () { musteriModal(); }, teklif: function () { go('teklif/yeni'); }, proje: function () { projeModal(); }, saha: function () { sahaModal(); }, fatura: function () { faturaModal(); }, gelir: function () { hareketModal('gelir'); }, gider: function () { hareketModal('gider'); }, hatirlatma: function () { hatModal(); } })[a.dataset.k]();
+        ({ musteri: function () { musteriModal(); }, teklif: function () { go('teklif/yeni'); }, proje: function () { projeModal(); }, saha: function () { sahaModal(); }, fatura: function () { faturaModal(); }, gelir: function () { hareketModal('gelir'); }, gider: function () { hareketModal('gider'); }, hatirlatma: function () { hatModal(); }, 'kargo-gelen': function () { kargoModal('gelen'); }, 'kargo-giden': function () { kargoModal('giden'); } })[a.dataset.k]();
         break;
       case 'profil': closeMenu(); profilModal(); break;
       case 'tab': st.tab[a.dataset.k] = a.dataset.v; render(); break;

@@ -71,6 +71,29 @@ function rego_panel_install_tables() {
 		KEY musteri_id (musteri_id)
 	) $c;" );
 
+	dbDelta( "CREATE TABLE {$p}kargo (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		yon varchar(10) NOT NULL DEFAULT 'gelen',
+		musteri_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		proje_id bigint(20) unsigned NOT NULL DEFAULT 0,
+		karsi varchar(190) NOT NULL DEFAULT '',
+		icerik varchar(255) NOT NULL DEFAULT '',
+		kargo_firma varchar(60) NOT NULL DEFAULT '',
+		takip_no varchar(80) NOT NULL DEFAULT '',
+		tarih date NULL,
+		durum varchar(20) NOT NULL DEFAULT 'bekliyor',
+		teslim_tarihi date NULL,
+		teslim_yeri varchar(120) NOT NULL DEFAULT '',
+		teslim_kisi varchar(120) NOT NULL DEFAULT '',
+		ucret decimal(14,2) NOT NULL DEFAULT 0,
+		odeme varchar(20) NOT NULL DEFAULT '',
+		notlar text NULL,
+		created_at datetime NOT NULL,
+		created_by bigint(20) unsigned NOT NULL DEFAULT 0,
+		PRIMARY KEY  (id),
+		KEY durum (durum)
+	) $c;" );
+
 	dbDelta( "CREATE TABLE {$p}proje (
 		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 		kod varchar(40) NOT NULL,
@@ -200,6 +223,7 @@ function rego_panel_default_settings() {
 		'gelir_kategorileri' => array( 'Hizmet bedeli', 'Cihaz satışı', 'Eğitim', 'Diğer' ),
 		'hesaplar'       => array( 'Banka', 'Nakit', 'Kredi kartı' ),
 		'gorevler'       => array( 'Satın alma', 'Patron / Genel müdür', 'Ar-Ge', 'Kalite', 'Üretim', 'Teknik / Mühendislik', 'Diğer' ),
+		'kargo_firmalari' => array( 'Yurtiçi Kargo', 'Aras Kargo', 'MNG Kargo', 'PTT Kargo', 'Sürat Kargo', 'DHL', 'UPS', 'Kurye', 'Elden' ),
 		'birimler'       => array( 'Adet', 'Gün', 'Saat', 'Parça', 'Set', 'Lisans', 'Ay' ),
 		'hizmetler'      => array( '3D Tarama', 'Tersine Mühendislik', 'Kalite Kontrol', 'CNC İşleme', 'Cihaz / Yazılım Satışı', 'Eğitim' ),
 		'sablonlar'      => array(

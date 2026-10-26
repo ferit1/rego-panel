@@ -68,6 +68,18 @@ function rego_resources() {
 			),
 			'required' => array( 'tarih', 'tutar' ),
 		),
+		'kargo' => array(
+			'read'   => 'rego_access',
+			'write'  => 'rego_access',
+			'order'  => 'id DESC',
+			'fields' => array(
+				'yon' => 'rego_clean_yon', 'musteri_id' => $int, 'proje_id' => $int, 'karsi' => $text, 'icerik' => $text,
+				'kargo_firma' => $text, 'takip_no' => $text, 'tarih' => $date, 'durum' => 'rego_clean_kargo_durum',
+				'teslim_tarihi' => $date, 'teslim_yeri' => $text, 'teslim_kisi' => $text, 'ucret' => 'rego_clean_money',
+				'odeme' => $text, 'notlar' => $area,
+			),
+			'required' => array( 'yon' ),
+		),
 		'saha' => array(
 			'read'   => 'rego_access',
 			'write'  => 'rego_saha_edit',
@@ -98,6 +110,12 @@ function rego_clean_money( $v ) {
 }
 function rego_clean_para( $v ) {
 	return in_array( $v, array( '₺', '$', '€', '£' ), true ) ? $v : '₺';
+}
+function rego_clean_yon( $v ) {
+	return 'giden' === $v ? 'giden' : 'gelen';
+}
+function rego_clean_kargo_durum( $v ) {
+	return in_array( $v, array( 'bekliyor', 'yolda', 'teslim' ), true ) ? $v : 'bekliyor';
 }
 function rego_clean_tur( $v ) {
 	return 'gelir' === $v ? 'gelir' : 'gider';
@@ -360,6 +378,7 @@ function rego_api_bootstrap() {
 		'users'    => rego_panel_users(),
 		'settings' => current_user_can( 'rego_teklif' ) || current_user_can( 'rego_ayarlar' ) ? rego_settings_public( $s ) : array(
 			'birimler' => $s['birimler'], 'hizmetler' => $s['hizmetler'], 'firma_unvan' => $s['firma_unvan'],
+			'kargo_firmalari' => $s['kargo_firmalari'], 'gorevler' => $s['gorevler'],
 		),
 		'data'     => $data,
 		'today'    => rego_today(),
@@ -437,7 +456,7 @@ function rego_api_save( $type, $id, WP_REST_Request $req ) {
 			}
 		}
 		$row['created_at'] = rego_now();
-		if ( 'musteri' === $type || 'hareket' === $type ) {
+		if ( in_array( $type, array( 'musteri', 'hareket', 'kargo' ), true ) ) {
 			$row['created_by'] = get_current_user_id();
 		}
 		if ( 'hareket' === $type && 'odendi' === ( $row['durum'] ?? 'odendi' ) && empty( $row['odeme_tarihi'] ) ) {
@@ -590,7 +609,7 @@ function rego_api_ayarlar( WP_REST_Request $req ) {
 			$s[ $k ] = sanitize_textarea_field( $p[ $k ] );
 		}
 	}
-	foreach ( array( 'birimler', 'hizmetler', 'gider_kategorileri', 'gelir_kategorileri', 'hesaplar', 'gorevler' ) as $k ) {
+	foreach ( array( 'birimler', 'hizmetler', 'gider_kategorileri', 'gelir_kategorileri', 'hesaplar', 'gorevler', 'kargo_firmalari' ) as $k ) {
 		if ( isset( $p[ $k ] ) ) {
 			$s[ $k ] = array_values( array_filter( array_map( 'sanitize_text_field', (array) $p[ $k ] ) ) );
 		}

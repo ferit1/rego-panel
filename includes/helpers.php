@@ -198,6 +198,9 @@ function rego_row( $type, $r ) {
 		$r['toplam_goster'] = (int) $r['toplam_goster'];
 		$r['toplamlar']     = rego_teklif_toplam( $r['kalemler'] );
 	}
+	if ( 'kargo' === $type ) {
+		$r['ucret'] = (float) $r['ucret'];
+	}
 	if ( 'hareket' === $type ) {
 		$r['tutar']      = (float) $r['tutar'];
 		$r['sonraki_id'] = (int) $r['sonraki_id'];
