@@ -1,6 +1,6 @@
 {
-  "version": "1.6.1",
-  "package": "https://github.com/ferit1/rego-panel/archive/91273f95c54a5fa345f2fe3b332447637b8ccf6b.zip",
+  "version": "1.6.2",
+  "package": "https://github.com/ferit1/rego-panel/archive/3f0629646ae30a91450540084c8950ca31b758d4.zip",
   "date": "2026-10-26",
-  "notes": "Adı girilmemiş hesap panel açılınca kime ait olduğunu sorar; böylece 'Rego Technology' yerine kişinin adı görünür. Kullanıcılar ekranında ad ve telefon düzenlenebilir."
+  "notes": "Kişi listelerinde aynı hesap iki kez görünmez; aynı adlı iki hesabın yanında e-posta yazar, kendi hesabınız (siz) diye işaretlenir."
 }
