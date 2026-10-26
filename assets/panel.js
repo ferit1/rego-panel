@@ -383,15 +383,20 @@
       '</section>';
   };
 
+  function kisiOzet(mid) {
+    var ks = kisilerOf(mid);
+    if (!ks.length) return '—';
+    return esc(ks[0].ad) + (ks[0].gorev ? ' <span class="small muted">' + esc(ks[0].gorev) + '</span>' : '') + (ks.length > 1 ? ' <span class="chip c-mute">+' + (ks.length - 1) + '</span>' : '');
+  }
   VIEWS.musteri = function () {
     var fin = can('rego_finans') && B.data.fatura;
-    var rows = list('musteri').filter(function (m) { return match([m.firma, m.kisi, m.sehir, m.email, m.tel, m.sektor].join(' ')); });
+    var rows = list('musteri').filter(function (m) { return match([m.firma, m.sehir, m.email, m.tel, m.sektor].concat(kisilerOf(m.id).map(function (k) { return k.ad + ' ' + k.gorev + ' ' + k.tel; })).join(' ')); });
     var head = '<tr><th>Firma</th><th>İlgili kişi</th><th>Telefon</th><th>E-posta</th><th>Şehir</th><th class="r">Proje</th>' + (can('rego_teklif') ? '<th class="r">Teklif</th>' : '') + (fin ? '<th class="r">Açık bakiye</th>' : '') + '</tr>';
     var body = rows.map(function (m) {
       var pc = list('proje').filter(function (p) { return p.musteri_id === m.id; }).length;
       var tc = list('teklif').filter(function (t) { return t.musteri_id === m.id; }).length;
       var bak = fin ? sumTxt(sumBy(list('fatura').filter(function (f) { return f.musteri_id === m.id && !f.odendi; }).map(fv))) : '';
-      return '<tr class="click" data-act="musteri-edit" data-id="' + m.id + '"><td><div class="strong">' + esc(m.firma) + '</div><div class="small muted">' + esc(m.sektor || '') + '</div></td><td>' + esc(m.kisi ? m.kisi + ' ' + (m.hitap || '') : '—') + '</td><td class="mono">' + esc(m.tel || '—') + '</td><td>' + esc(m.email || '—') + '</td><td>' + esc(m.sehir || '—') + '</td><td class="r num">' + pc + '</td>' +
+      return '<tr class="click" data-act="musteri-edit" data-id="' + m.id + '"><td><div class="strong">' + esc(m.firma) + '</div><div class="small muted">' + esc(m.sektor || '') + '</div></td><td>' + kisiOzet(m.id) + '</td><td class="mono">' + esc(m.tel || '—') + '</td><td>' + esc(m.email || '—') + '</td><td>' + esc(m.sehir || '—') + '</td><td class="r num">' + pc + '</td>' +
         (can('rego_teklif') ? '<td class="r num">' + tc + '</td>' : '') + (fin ? '<td class="r num' + (bak !== '—' ? ' strong' : '') + '">' + esc(bak) + '</td>' : '') + '</tr>';
     }).join('');
     var cols = 6 + (can('rego_teklif') ? 1 : 0) + (fin ? 1 : 0);
@@ -445,7 +450,7 @@
   function blankTeklif() {
     var sb = (B.settings.sablonlar || [])[0];
     return {
-      id: 0, no: '', musteri_id: 0, firma: '', kisi: '', kisi_email: '', kisi_tel: '', hitap: '', _tip: 'Bey', _hitapManual: false,
+      id: 0, no: '', musteri_id: 0, firma: '', kisiler: [blankKisi()], hitap: '', _hitapManual: false,
       tarih: today(), gonderen_id: B.me.id, durum: 'taslak',
       gonderen_ad: defaultHz().ad, gonderen_email: defaultHz().email, gonderen_tel: defaultHz().tel,
       kalemler: [{ ad: '', miktar: 1, birim: 'Adet', fiyat: 0, para: '€', teslim: '' }],
@@ -460,8 +465,8 @@
       var t = byId('teklif', st.id);
       if (!t) return null;
       E = clone(t);
-      var m = byId('musteri', t.musteri_id);
-      E._tip = (m && m.hitap) || (/Hanım,?$/.test(t.hitap) ? 'Hanım' : 'Bey');
+      if (!E.kisiler || !E.kisiler.length) E.kisiler = [blankKisi()];
+      E.kisiler.forEach(function (k) { if (!k.hitap) { var m = byId('musteri', t.musteri_id); k.hitap = /Hanım,?$/.test(t.hitap) ? 'Hanım' : ((m && m.hitap) || 'Bey'); } });
       E._hitapManual = !!t.hitap && t.hitap !== autoHitap(E);
     }
     st.forms.E = E;
@@ -473,7 +478,31 @@
     return hs.find(function (h) { return (h.email && lc(h.email) === lc(me.email)) || lc(h.ad) === lc(me.ad); }) || hs[0] || { ad: displayName(me), email: me.email, tel: me.tel };
   }
   function displayName(u) { return u && u.ad && u.ad !== u.login ? u.ad : (B.settings.firma_unvan || 'Rego Technology'); }
-  function autoHitap(E) { var f = String(E.kisi || '').trim().split(/\s+/)[0]; return f ? 'Sn. ' + f + ' ' + (E._tip || 'Bey') + ',' : ''; }
+  function autoHitap(E) {
+    var ks = (E.kisiler || []).filter(function (k) { return String(k.ad || '').trim(); });
+    if (!ks.length) return '';
+    var parts = ks.map(function (k) { return 'Sn. ' + String(k.ad).trim().split(/\s+/)[0] + ' ' + (k.hitap || 'Bey'); });
+    return (parts.length > 1 ? parts.slice(0, -1).join(', ') + ' ve ' + parts[parts.length - 1] : parts[0]) + ',';
+  }
+  function kisilerOf(mid) { return (B.kisi || []).filter(function (k) { return k.musteri_id === mid; }); }
+  function kisiSync(r) {
+    if (!r || !r.musteri_id || !r.kisi) return;
+    B.kisi = (B.kisi || []).filter(function (k) { return k.musteri_id !== r.musteri_id; }).concat(r.kisi);
+  }
+  function gorevler() { return B.settings.gorevler || ['Satın alma', 'Patron / Genel müdür', 'Ar-Ge', 'Kalite', 'Üretim', 'Diğer']; }
+  function blankKisi() { return { ad: '', hitap: 'Bey', gorev: '', email: '', tel: '' }; }
+  /* Editable contact rows; `root` is the data-root of the form, `pre` prefixes element ids. */
+  function kisiRows(list, pre) {
+    return '<div class="kisiler">' + list.map(function (k, i) {
+      return '<div class="kisi-row">' +
+        '<label class="f" for="' + pre + i + 'a">Ad soyad<input id="' + pre + i + 'a" data-bind="kisiler.' + i + '.ad" value="' + esc(k.ad) + '" placeholder="Mustafa ALTAN"></label>' +
+        '<label class="f" for="' + pre + i + 'g">Görevi<select id="' + pre + i + 'g" data-bind="kisiler.' + i + '.gorev"><option value="">Seçin</option>' + gorevler().concat(k.gorev && gorevler().indexOf(k.gorev) < 0 ? [k.gorev] : []).map(function (g) { return '<option' + (g === k.gorev ? ' selected' : '') + '>' + esc(g) + '</option>'; }).join('') + '</select></label>' +
+        '<label class="f" for="' + pre + i + 'h">Hitap<select id="' + pre + i + 'h" data-bind="kisiler.' + i + '.hitap"><option' + (k.hitap !== 'Hanım' ? ' selected' : '') + '>Bey</option><option' + (k.hitap === 'Hanım' ? ' selected' : '') + '>Hanım</option></select></label>' +
+        '<label class="f" for="' + pre + i + 't">Telefon<input id="' + pre + i + 't" type="tel" data-bind="kisiler.' + i + '.tel" value="' + esc(k.tel) + '"></label>' +
+        '<label class="f" for="' + pre + i + 'e">E-posta<input id="' + pre + i + 'e" type="email" data-bind="kisiler.' + i + '.email" value="' + esc(k.email) + '"></label>' +
+        '<button class="icon-btn x" type="button" data-act="kisi-del" data-i="' + i + '" aria-label="Kişiyi kaldır" title="Kişiyi kaldır">×</button></div>';
+    }).join('') + '</div>';
+  }
 
   function editorView() {
     var E = loadEditor();
@@ -483,14 +512,15 @@
       '<datalist id="dl-birim">' + (s.birimler || []).map(function (b) { return '<option value="' + esc(b) + '">'; }).join('') + '</datalist>' +
       '<datalist id="dl-kos">' + KOS_BASLIK.map(function (b) { return '<option value="' + esc(b) + '">'; }).join('') + '</datalist>';
     var isNew = !E.id;
-    var musteri = '<section class="panel"><div class="sec-h"><h2>Firma bilgileri</h2><span class="hint">Kayıtlı firmayı seçince kişi bilgileri dolar. Yeni firma, kaydedince müşterilere eklenir.</span></div>' +
-      '<div class="form c3">' +
-      fld('Firma', '<input id="e-firma" data-bind="firma" list="dl-firma" value="' + esc(E.firma) + '" required autocomplete="off">', 'full') +
-      fld('İlgili kişi', '<input id="e-kisi" data-bind="kisi" value="' + esc(E.kisi) + '">') +
-      fld('Hitap', '<select id="e-tip" data-bind="_tip"><option' + (E._tip === 'Bey' ? ' selected' : '') + '>Bey</option><option' + (E._tip === 'Hanım' ? ' selected' : '') + '>Hanım</option></select>') +
-      fld('Hitap satırı', '<input id="e-hitap" data-bind="hitap" value="' + esc(E.hitap || autoHitap(E)) + '" placeholder="Sn. Mustafa Bey,">') +
-      fld('E-posta', '<input id="e-mail" data-bind="kisi_email" type="email" value="' + esc(E.kisi_email) + '" placeholder="Boş bırakılırsa “-” yazılır">') +
-      fld('Telefon', '<input id="e-tel" data-bind="kisi_tel" type="tel" value="' + esc(E.kisi_tel) + '">') +
+    var kayitli = E.musteri_id ? kisilerOf(E.musteri_id).filter(function (k) { return !E.kisiler.some(function (x) { return lc(x.ad) === lc(k.ad); }); }) : [];
+    var musteri = '<section class="panel"><div class="sec-h"><h2>Firma ve ilgili kişiler</h2><span class="hint">Kayıtlı firmayı seçince kişileri gelir. Yeni firma ve kişiler, kaydedince müşterilere eklenir.</span></div>' +
+      '<div class="form">' +
+      fld('Firma', '<input id="e-firma" data-bind="firma" list="dl-firma" value="' + esc(E.firma) + '" required autocomplete="off">', 'full') + '</div>' +
+      '<div id="e-kisiler">' + kisiRows(E.kisiler, 'ek') + '</div>' +
+      '<div class="row" style="margin-top:10px"><button class="btn sm" type="button" data-act="kisi-add">+ Kişi ekle</button>' +
+      (kayitli.length ? '<select class="inp" id="e-kayitli" style="width:auto"><option value="">Firmanın kayıtlı kişilerinden ekle…</option>' + kayitli.map(function (k) { return '<option value="' + k.id + '">' + esc(k.ad + (k.gorev ? ' – ' + k.gorev : '')) + '</option>'; }).join('') + '</select>' : '') + '</div>' +
+      '<div class="form" style="margin-top:12px">' +
+      fld('Hitap satırı (PDF’te)', '<input id="e-hitap" data-bind="hitap" value="' + esc(E.hitap || autoHitap(E)) + '" placeholder="Sn. Mustafa Bey,">', 'full') +
       '</div></section>';
 
     var items = '<section class="panel"><div class="sec-h"><h2>Ürün ve hizmetler</h2><span class="hint">Fiyatlar KDV hariç. Ürün adında satır atlayabilirsiniz.</span></div>' +
@@ -508,6 +538,17 @@
       }).join('') + '</div>' +
       '<div class="row" style="margin-top:12px;justify-content:space-between"><button class="btn sm" type="button" data-act="kalem-add">+ Kalem ekle</button>' +
       '<label class="check" for="e-tg"><input id="e-tg" type="checkbox" data-bind="toplam_goster"' + (E.toplam_goster ? ' checked' : '') + '> PDF’te tablo altına genel toplamı yaz</label></div></section>';
+
+    E.gorseller = E.gorseller || [];
+    var gal = '<section class="panel"><div class="sec-h"><h2>Görseller</h2><span class="hint">PDF’te ürün tablosunun altında ikişer ikişer basılır. JPG, PNG ya da WEBP; büyük görseller küçültülür.</span></div>' +
+      '<div class="gal-ed">' + E.gorseller.map(function (g, i) {
+        return '<figure class="gal-i"><div class="gal-img"><img src="' + esc(g.url) + '" alt=""></div>' +
+          '<input class="inp" id="eg' + i + '" data-bind="gorseller.' + i + '.aciklama" value="' + esc(g.aciklama || '') + '" placeholder="Açıklama (isteğe bağlı)" aria-label="Görsel açıklaması">' +
+          '<div class="row" style="justify-content:space-between"><span class="row"><button class="icon-btn" type="button" data-act="gorsel-sol" data-i="' + i + '" aria-label="Sola taşı" title="Sola taşı">←</button><button class="icon-btn" type="button" data-act="gorsel-sag" data-i="' + i + '" aria-label="Sağa taşı" title="Sağa taşı">→</button></span>' +
+          '<button class="btn sm ghost danger" type="button" data-act="gorsel-sil" data-i="' + i + '">Kaldır</button></div></figure>';
+      }).join('') +
+      '<label class="gal-add" for="e-gorsel-yukle"><input id="e-gorsel-yukle" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden><span>+ Görsel yükle</span><small id="gal-durum">Bilgisayardan seçin</small></label>' +
+      '</div></section>';
 
     var kos = '<section class="panel"><div class="sec-h"><h2>Teklif koşulları</h2><div class="row"><select class="inp" id="e-sablon" style="width:auto;max-width:280px" aria-label="Koşul şablonu"><option value="">Şablon seç…</option>' +
       (s.sablonlar || []).map(function (x, i) { return '<option value="' + i + '">' + esc(x.ad) + '</option>'; }).join('') + '</select><button class="btn sm" type="button" data-act="sablon-uygula">Uygula</button></div></div>' +
@@ -535,7 +576,7 @@
       '<a class="btn ghost" href="#teklif">← Tekliflere dön</a></div></aside>';
 
     return dl + '<div class="head"><div><h1>' + (isNew ? 'Yeni fiyat teklifi' : esc(E.firma || 'Teklif')) + '</h1><p class="sub">' + (isNew ? 'Firma, kalemler ve koşulları girin; PDF hazır formatta çıkar.' : esc(E.no) + ' · ' + fmtD(E.tarih)) + '</p></div></div>' +
-      '<div class="ed" data-root="E"><div class="stack" style="gap:16px">' + musteri + items + kos + ek + '</div>' + side + '</div>';
+      '<div class="ed" data-root="E"><div class="stack" style="gap:16px">' + musteri + items + gal + kos + ek + '</div>' + side + '</div>';
   }
   function hzOptions(E) {
     var hs = hazirlayanlar().slice();
@@ -575,16 +616,19 @@
     var p = el.dataset.bind;
     if (p === 'firma') {
       var m = list('musteri').find(function (x) { return lc(x.firma) === lc(el.value.trim()); });
+      var was = E.musteri_id;
       E.musteri_id = m ? m.id : 0;
-      if (m) {
-        if (!E.kisi) { E.kisi = m.kisi || ''; $('#e-kisi').value = E.kisi; }
-        if (!E.kisi_email) { E.kisi_email = m.email || ''; $('#e-mail').value = E.kisi_email; }
-        if (!E.kisi_tel) { E.kisi_tel = m.tel || ''; $('#e-tel').value = E.kisi_tel; }
-        if (m.hitap) { E._tip = m.hitap; $('#e-tip').value = m.hitap; }
+      if (m && m.id !== was) {
+        var bos = !E.kisiler.some(function (k) { return String(k.ad || '').trim(); });
+        var ks = kisilerOf(m.id);
+        if (bos && ks.length) E.kisiler = [{ ad: ks[0].ad, hitap: ks[0].hitap || 'Bey', gorev: ks[0].gorev, email: ks[0].email, tel: ks[0].tel }];
+        if (!E._hitapManual) E.hitap = autoHitap(E);
+        rerenderEditorKeepFocus('e-firma');
+        return;
       }
     }
     if (p === 'hitap') E._hitapManual = el.value.trim() !== '' && el.value !== autoHitap(E);
-    if ((p === 'kisi' || p === '_tip' || p === 'firma') && !E._hitapManual) { E.hitap = autoHitap(E); $('#e-hitap').value = E.hitap; }
+    if (/^kisiler\./.test(p) && !E._hitapManual) { E.hitap = autoHitap(E); var hi = $('#e-hitap'); if (hi) hi.value = E.hitap; }
     if (/^kalemler\./.test(p)) {
       var i = +p.split('.')[1], k = E.kalemler[i];
       var t = $('[data-tot="' + i + '"]'); if (t) t.textContent = money((k.miktar || 0) * (k.fiyat || 0), k.para);
@@ -592,9 +636,14 @@
     }
   }
 
+  function rerenderEditorKeepFocus(id) {
+    var el = document.getElementById(id), pos = el && el.selectionStart, y = window.scrollY;
+    render(); window.scrollTo(0, y);
+    var n = document.getElementById(id); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} }
+  }
   function editorPayload(E) {
     var o = {};
-    ['musteri_id', 'firma', 'kisi', 'kisi_email', 'kisi_tel', 'hitap', 'tarih', 'gonderen_id', 'gonderen_ad', 'gonderen_email', 'gonderen_tel', 'durum', 'kalemler', 'kosullar', 'ek_baslik', 'ek_metin', 'ek_yeni_sayfa', 'toplam_goster'].forEach(function (k) { o[k] = E[k]; });
+    ['musteri_id', 'firma', 'kisiler', 'hitap', 'tarih', 'gonderen_id', 'gonderen_ad', 'gonderen_email', 'gonderen_tel', 'durum', 'kalemler', 'kosullar', 'gorseller', 'ek_baslik', 'ek_metin', 'ek_yeni_sayfa', 'toplam_goster'].forEach(function (k) { o[k] = E[k]; });
     if (!o.hitap) o.hitap = autoHitap(E);
     return o;
   }
@@ -606,9 +655,10 @@
     return api(path, E.id ? 'PUT' : 'POST', editorPayload(E)).then(function (r) {
       upsert('teklif', r.item);
       if (r.musteri) upsert('musteri', r.musteri);
+      kisiSync(r);
       var wasNew = !E.id;
-      var tip = E._tip;
-      st.forms.E = clone(r.item); st.forms.E._tip = tip; st.forms.E._hitapManual = E._hitapManual;
+      st.forms.E = clone(r.item); st.forms.E._hitapManual = E._hitapManual;
+      if (!st.forms.E.kisiler || !st.forms.E.kisiler.length) st.forms.E.kisiler = [blankKisi()];
       st.dirty = false;
       if (wasNew) { history.replaceState(null, '', '#teklif/' + r.item.id); st.id = String(r.item.id); }
       render();
@@ -787,6 +837,7 @@
       '<section class="panel"><h2 style="margin-bottom:14px">Listeler</h2><div class="form">' +
       fld('Birimler (virgülle ayırın)', '<input id="s-birim" data-bind="birimler" data-csv value="' + esc((S.birimler || []).join(', ')) + '">') +
       fld('Hizmet türleri (virgülle ayırın)', '<input id="s-hizmet" data-bind="hizmetler" data-csv value="' + esc((S.hizmetler || []).join(', ')) + '">') +
+      fld('Kişi görevleri (virgülle ayırın)', '<input id="s-gorev" data-bind="gorevler" data-csv value="' + esc((S.gorevler || []).join(', ')) + '">') +
       fld('Gider kategorileri (virgülle ayırın)', '<input id="s-gider" data-bind="gider_kategorileri" data-csv value="' + esc((S.gider_kategorileri || []).join(', ')) + '">') +
       fld('Gelir kategorileri (virgülle ayırın)', '<input id="s-gelir" data-bind="gelir_kategorileri" data-csv value="' + esc((S.gelir_kategorileri || []).join(', ')) + '">') +
       fld('Ödeme şekilleri (virgülle ayırın)', '<input id="s-hesap" data-bind="hesaplar" data-csv value="' + esc((S.hesaplar || []).join(', ')) + '">') +
@@ -832,24 +883,29 @@
         '<div><h3 style="margin-bottom:6px">Projeler</h3><div class="list">' + (ps.map(function (p) { return '<div class="li" style="grid-template-columns:minmax(0,1fr) auto;padding:6px 0"><span class="small">' + esc(p.ad) + '</span>' + stageChip(p.asama) + '</div>'; }).join('') || '<span class="small muted">Proje yok.</span>') + '</div></div></div>';
     }
     var dis = ed ? '' : ' disabled';
+    var mk = m.id ? kisilerOf(m.id) : [];
+    st.forms.M = { kisiler: mk.length ? clone(mk) : [blankKisi()] };
+    var kisiBlok = ed ? '<div class="full"><h3 style="margin-bottom:8px">İlgili kişiler</h3><div id="m-kisiler">' + kisiRows(st.forms.M.kisiler, 'mk') + '</div><button class="btn sm" type="button" data-act="kisi-add" style="margin-top:8px">+ Kişi ekle</button></div>'
+      : '<div class="full"><h3 style="margin-bottom:8px">İlgili kişiler</h3><div class="list">' + (mk.map(function (k) { return '<div class="li" style="grid-template-columns:minmax(0,1fr) auto;padding:6px 0"><span><b>' + esc(k.ad) + '</b> <span class="muted small">' + esc(k.gorev || '') + '</span></span><span class="small mono">' + esc(k.tel || '') + '</span></div>'; }).join('') || '<span class="small muted">Kişi yok.</span>') + '</div></div>';
     modal(m.id ? m.firma : 'Yeni müşteri',
       '<div class="form">' +
       fld('Firma adı', '<input id="m-firma" required value="' + esc(m.firma) + '"' + dis + '>', 'full') +
-      fld('İlgili kişi', '<input id="m-kisi" value="' + esc(m.kisi) + '"' + dis + '>') +
-      fld('Hitap', '<select id="m-hitap"' + dis + '><option' + (m.hitap !== 'Hanım' ? ' selected' : '') + '>Bey</option><option' + (m.hitap === 'Hanım' ? ' selected' : '') + '>Hanım</option></select>') +
-      fld('E-posta', '<input id="m-email" type="email" value="' + esc(m.email) + '"' + dis + '>') +
-      fld('Telefon', '<input id="m-tel" type="tel" value="' + esc(m.tel) + '"' + dis + '>') +
+      kisiBlok +
+      fld('Firma e-postası', '<input id="m-email" type="email" value="' + esc(m.email) + '"' + dis + ' placeholder="info@…">') +
+      fld('Firma telefonu', '<input id="m-tel" type="tel" value="' + esc(m.tel) + '"' + dis + '>') +
       fld('Şehir', '<input id="m-sehir" value="' + esc(m.sehir) + '"' + dis + '>') +
       fld('Sektör', '<input id="m-sektor" value="' + esc(m.sektor) + '" placeholder="Otomotiv, kalıp, savunma…"' + dis + '>') +
       fld('Notlar', '<textarea id="m-not" data-auto rows="2"' + dis + '>' + esc(m.notlar || '') + '</textarea>', 'full') + '</div>' + extra,
       {
+        root: 'M', wide: true,
         ok: ed ? 'Kaydet' : 'Kapat',
         del: m.id && can('rego_sil') ? function () { return api('musteri/' + m.id, 'DELETE').then(function () { drop('musteri', m.id); toast('Müşteri silindi'); render(); }); } : null,
         submit: function () {
           if (!ed) return true;
           if (!val('m-firma')) { toast('Firma adını girin.', true); return false; }
-          return api(m.id ? 'musteri/' + m.id : 'musteri', m.id ? 'PUT' : 'POST', { firma: val('m-firma'), kisi: val('m-kisi'), hitap: val('m-hitap'), email: val('m-email'), tel: val('m-tel'), sehir: val('m-sehir'), sektor: val('m-sektor'), notlar: val('m-not') })
-            .then(function (r) { upsert('musteri', r.item); toast(m.id ? 'Müşteri güncellendi' : 'Müşteri eklendi'); render(); });
+          var ks = st.forms.M.kisiler.filter(function (k) { return String(k.ad || '').trim(); });
+          return api(m.id ? 'musteri/' + m.id : 'musteri', m.id ? 'PUT' : 'POST', { firma: val('m-firma'), kisiler: ks, email: val('m-email'), tel: val('m-tel'), sehir: val('m-sehir'), sektor: val('m-sektor'), notlar: val('m-not') })
+            .then(function (r) { kisiSync(r); upsert('musteri', r.item); toast(m.id ? 'Müşteri güncellendi' : 'Müşteri eklendi'); render(); });
         }
       });
   }
@@ -1215,6 +1271,21 @@
         try { Notification.requestPermission().then(function (p) { toast(p === 'granted' ? 'Masaüstü bildirimleri açıldı' : 'Masaüstü bildirimlerine izin verilmedi', p !== 'granted'); if (st.menu) st.menu.innerHTML = bellHtml(); }); } catch (er) { fail(er); }
         break;
       case 'hat-new': closeMenu(); hatModal(); break;
+      case 'gorsel-sil': st.forms.E.gorseller.splice(i, 1); st.dirty = true; rerenderEditorKeepFocus('e-firma'); break;
+      case 'gorsel-sol': case 'gorsel-sag':
+        var gs = st.forms.E.gorseller, gj = act === 'gorsel-sol' ? i - 1 : i + 1;
+        if (gj >= 0 && gj < gs.length) { var gt = gs[i]; gs[i] = gs[gj]; gs[gj] = gt; st.dirty = true; rerenderEditorKeepFocus('e-firma'); }
+        break;
+      case 'kisi-add':
+        if (root === 'E') { st.forms.E.kisiler.push(blankKisi()); st.dirty = true; rerenderEditorKeepFocus('ek' + (st.forms.E.kisiler.length - 1) + 'a'); }
+        else if (root === 'M') { st.forms.M.kisiler.push(blankKisi()); $('#m-kisiler').innerHTML = kisiRows(st.forms.M.kisiler, 'mk'); var nk = $('#mk' + (st.forms.M.kisiler.length - 1) + 'a'); if (nk) nk.focus(); }
+        break;
+      case 'kisi-del':
+        var F = st.forms[root];
+        F.kisiler.splice(i, 1); if (!F.kisiler.length) F.kisiler.push(blankKisi());
+        if (root === 'E') { st.dirty = true; if (!F._hitapManual) F.hitap = autoHitap(F); rerenderEditorKeepFocus('e-firma'); }
+        else $('#m-kisiler').innerHTML = kisiRows(F.kisiler, 'mk');
+        break;
       case 'hat-edit': var hh = (B.hatirlatma || []).find(function (x) { return x.id === id; }); if (hh) hatAc(hh); break;
       case 'open-drawer': $('#rail').classList.add('open'); $('#scrim').classList.add('open'); break;
       case 'close-drawer': $('#rail').classList.remove('open'); $('#scrim').classList.remove('open'); break;
@@ -1378,6 +1449,30 @@
 
   function onChange(e) {
     var el = e.target;
+    if (el.id === 'e-gorsel-yukle' && el.files && el.files.length) {
+      var files = Array.prototype.slice.call(el.files), E1 = st.forms.E, done = 0;
+      var durum = $('#gal-durum'); if (durum) durum.textContent = 'Yükleniyor… 0/' + files.length;
+      files.reduce(function (pr, f) {
+        return pr.then(function () {
+          var fd = new FormData(); fd.append('dosya', f);
+          return fetch(C.api + 'gorsel', { method: 'POST', credentials: 'same-origin', headers: { 'X-WP-Nonce': C.nonce }, body: fd })
+            .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.message || 'Görsel yüklenemedi.'); return j; }); })
+            .then(function (g) { E1.gorseller.push(g); st.dirty = true; done++; var d = $('#gal-durum'); if (d) d.textContent = 'Yükleniyor… ' + done + '/' + files.length; })
+            .catch(function (er) { fail(new Error(f.name + ': ' + er.message)); });
+        });
+      }, Promise.resolve()).then(function () { if (done) toast(done + ' görsel eklendi; teklifi kaydetmeyi unutmayın'); rerenderEditorKeepFocus('e-firma'); });
+      return;
+    }
+    if (el.id === 'e-kayitli' && el.value) {
+      var E0 = st.forms.E, kk = (B.kisi || []).find(function (k) { return k.id === +el.value; });
+      if (E0 && kk) {
+        var add = { ad: kk.ad, hitap: kk.hitap || 'Bey', gorev: kk.gorev, email: kk.email, tel: kk.tel };
+        if (E0.kisiler.length === 1 && !String(E0.kisiler[0].ad || '').trim()) E0.kisiler = [add]; else E0.kisiler.push(add);
+        if (!E0._hitapManual) E0.hitap = autoHitap(E0);
+        st.dirty = true; rerenderEditorKeepFocus('e-firma');
+      }
+      return;
+    }
     if (el.dataset.actChange === 'hazirlayan') {
       var E = st.forms.E, h = hazirlayanlar().find(function (x) { return x.ad === el.value; });
       if (E && h) { E.gonderen_ad = h.ad; E.gonderen_email = h.email || ''; E.gonderen_tel = h.tel || ''; st.dirty = true; }

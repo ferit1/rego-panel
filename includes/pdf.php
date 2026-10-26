@@ -49,7 +49,7 @@ function rego_pdf_render( $t ) {
 	}
 
 	$opt = new \Dompdf\Options();
-	$opt->setChroot( array( REGO_PANEL_DIR ) );
+	$opt->setChroot( array( REGO_PANEL_DIR, trailingslashit( $up['basedir'] ) . 'rego-panel/teklif' ) );
 	$opt->setFontDir( $cache );
 	$opt->setFontCache( $cache );
 	$opt->setTempDir( get_temp_dir() );

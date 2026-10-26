@@ -183,6 +183,17 @@ function rego_row( $type, $r ) {
 	if ( 'teklif' === $type ) {
 		$r['kalemler']      = json_decode( $r['kalemler'] ?: '[]', true ) ?: array();
 		$r['kosullar']      = json_decode( $r['kosullar'] ?: '[]', true ) ?: array();
+		$r['kisiler']       = json_decode( ( $r['kisiler'] ?? '' ) ?: '[]', true ) ?: array();
+		$r['gorseller']     = json_decode( ( $r['gorseller'] ?? '' ) ?: '[]', true ) ?: array();
+		$upl                = trailingslashit( wp_upload_dir()['baseurl'] );
+		foreach ( $r['gorseller'] as &$g ) {
+			$g['url'] = $upl . $g['dosya'];
+		}
+		unset( $g );
+		if ( ! $r['kisiler'] && '' !== trim( (string) $r['kisi'] ) ) {
+			// Quotes saved before multiple contacts existed.
+			$r['kisiler'] = array( array( 'ad' => $r['kisi'], 'hitap' => '', 'gorev' => '', 'email' => $r['kisi_email'], 'tel' => $r['kisi_tel'] ) );
+		}
 		$r['ek_yeni_sayfa'] = (int) $r['ek_yeni_sayfa'];
 		$r['toplam_goster'] = (int) $r['toplam_goster'];
 		$r['toplamlar']     = rego_teklif_toplam( $r['kalemler'] );

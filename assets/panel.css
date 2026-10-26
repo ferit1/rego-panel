@@ -298,3 +298,19 @@ label.f textarea,textarea.inp{resize:vertical;line-height:1.5}
 .li.hat-li:last-child{border-bottom:0}
 .hat-li .t,.hat-li .m{display:block}
 .d-hat{background:var(--bad)}
+
+/* ---------- contacts ---------- */
+.kisiler{display:flex;flex-direction:column;gap:8px}
+.kisi-row{display:grid;grid-template-columns:minmax(150px,1.4fr) minmax(130px,1fr) 90px minmax(120px,1fr) minmax(150px,1.2fr) 30px;gap:8px;align-items:end;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.kisi-row .icon-btn{margin-bottom:6px}
+@media (max-width:900px){.kisi-row{grid-template-columns:repeat(2,minmax(0,1fr))}.kisi-row .icon-btn{grid-column:2;justify-self:end}}
+
+/* ---------- quote images ---------- */
+.gal-ed{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.gal-i{margin:0;display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);min-width:0}
+.gal-img{aspect-ratio:4/3;max-width:100%;border-radius:7px;background:var(--surface);display:grid;place-items:center;overflow:hidden}
+.gal-img img{max-width:100%;max-height:100%;object-fit:contain}
+.gal-add{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:170px;border:2px dashed var(--line);border-radius:10px;cursor:pointer;color:var(--accent);font-weight:700}
+.gal-add:hover{border-color:var(--accent);background:var(--accent-soft)}
+.gal-add small{color:var(--muted);font-weight:500}
+.gal-add:focus-within{outline:2px solid var(--accent)}

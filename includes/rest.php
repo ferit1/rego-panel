@@ -41,7 +41,7 @@ function rego_resources() {
 				'musteri_id' => $int, 'firma' => $text, 'kisi' => $text, 'kisi_email' => $text, 'kisi_tel' => $text,
 				'hitap' => $text, 'tarih' => $date, 'gonderen_id' => $int, 'durum' => 'rego_clean_durum',
 				'gonderen_ad' => $text, 'gonderen_email' => 'sanitize_email', 'gonderen_tel' => $text,
-				'kalemler' => 'rego_clean_kalemler', 'kosullar' => 'rego_clean_kosullar',
+				'kalemler' => 'rego_clean_kalemler', 'kosullar' => 'rego_clean_kosullar', 'kisiler' => 'rego_clean_teklif_kisiler', 'gorseller' => 'rego_clean_gorseller',
 				'ek_baslik' => $text, 'ek_metin' => $area, 'ek_yeni_sayfa' => 'rego_clean_bool', 'toplam_goster' => 'rego_clean_bool',
 			),
 			'required' => array( 'firma' ),
@@ -135,6 +135,113 @@ function rego_clean_kalemler( $v ) {
 	}
 	return wp_json_encode( $out, JSON_UNESCAPED_UNICODE );
 }
+function rego_clean_kisi( $k ) {
+	return array(
+		'ad'    => sanitize_text_field( $k['ad'] ?? '' ),
+		'hitap' => in_array( $k['hitap'] ?? '', array( 'Bey', 'Hanım' ), true ) ? $k['hitap'] : 'Bey',
+		'gorev' => sanitize_text_field( $k['gorev'] ?? '' ),
+		'email' => sanitize_email( $k['email'] ?? '' ),
+		'tel'   => sanitize_text_field( $k['tel'] ?? '' ),
+	);
+}
+function rego_clean_teklif_kisiler( $v ) {
+	$out = array();
+	foreach ( (array) $v as $k ) {
+		if ( is_array( $k ) ) {
+			$c = rego_clean_kisi( $k );
+			if ( '' !== $c['ad'] ) {
+				$out[] = $c;
+			}
+		}
+	}
+	return wp_json_encode( $out, JSON_UNESCAPED_UNICODE );
+}
+
+/** Replaces a customer's contact list (keeps ids of rows that stay). */
+function rego_kisi_sync( $musteri_id, $list ) {
+	global $wpdb;
+	$t    = rego_t( 'kisi' );
+	$keep = array();
+	foreach ( array_values( (array) $list ) as $i => $k ) {
+		if ( ! is_array( $k ) ) {
+			continue;
+		}
+		$c = rego_clean_kisi( $k );
+		if ( '' === $c['ad'] ) {
+			continue;
+		}
+		$c['sira'] = $i;
+		$id        = (int) ( $k['id'] ?? 0 );
+		if ( $id && $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $t WHERE id = %d AND musteri_id = %d", $id, $musteri_id ) ) ) { // phpcs:ignore
+			$wpdb->update( $t, $c, array( 'id' => $id ) );
+		} else {
+			$c['musteri_id'] = $musteri_id;
+			$c['created_at'] = rego_now();
+			$wpdb->insert( $t, $c );
+			$id = (int) $wpdb->insert_id;
+		}
+		$keep[] = $id;
+	}
+	$existing = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM $t WHERE musteri_id = %d", $musteri_id ) ); // phpcs:ignore
+	foreach ( $existing as $id ) {
+		if ( ! in_array( (int) $id, $keep, true ) ) {
+			$wpdb->delete( $t, array( 'id' => (int) $id ) );
+		}
+	}
+	rego_kisi_ozet( $musteri_id );
+}
+
+/** Adds the quote's contacts that the customer does not have yet (matched by name). */
+function rego_kisi_ekle_eksik( $musteri_id, $kisiler ) {
+	global $wpdb;
+	$t = rego_t( 'kisi' );
+	$names = array_map( 'mb_strtolower', (array) $wpdb->get_col( $wpdb->prepare( "SELECT ad FROM $t WHERE musteri_id = %d", $musteri_id ) ) ); // phpcs:ignore
+	$n     = count( $names );
+	foreach ( (array) $kisiler as $k ) {
+		if ( '' === $k['ad'] || in_array( mb_strtolower( $k['ad'] ), $names, true ) ) {
+			continue;
+		}
+		$wpdb->insert( $t, $k + array( 'musteri_id' => $musteri_id, 'sira' => $n++, 'created_at' => rego_now() ) );
+		$names[] = mb_strtolower( $k['ad'] );
+	}
+	rego_kisi_ozet( $musteri_id );
+}
+
+/** Keeps the customer row's first-contact fields in step with the contact list. */
+function rego_kisi_ozet( $musteri_id ) {
+	global $wpdb;
+	$first = $wpdb->get_row( $wpdb->prepare( 'SELECT ad, hitap FROM ' . rego_t( 'kisi' ) . ' WHERE musteri_id = %d ORDER BY sira, id LIMIT 1', $musteri_id ), ARRAY_A ); // phpcs:ignore
+	$wpdb->update( rego_t( 'musteri' ), array( 'kisi' => $first ? $first['ad'] : '', 'hitap' => $first ? $first['hitap'] : 'Bey' ), array( 'id' => $musteri_id ) );
+}
+
+function rego_kisi_list( $musteri_id = 0 ) {
+	global $wpdb;
+	$sql  = 'SELECT * FROM ' . rego_t( 'kisi' ) . ( $musteri_id ? $wpdb->prepare( ' WHERE musteri_id = %d', $musteri_id ) : '' ) . ' ORDER BY musteri_id, sira, id';
+	$rows = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore
+	foreach ( $rows as &$r ) {
+		$r['id']         = (int) $r['id'];
+		$r['musteri_id'] = (int) $r['musteri_id'];
+	}
+	return $rows;
+}
+
+/** Quote images: only files the panel uploaded itself (uploads/rego-panel/teklif/…). */
+function rego_clean_gorseller( $v ) {
+	$base = trailingslashit( wp_upload_dir()['basedir'] );
+	$out  = array();
+	foreach ( (array) $v as $g ) {
+		if ( ! is_array( $g ) ) {
+			continue;
+		}
+		$d = ltrim( str_replace( '\\', '/', (string) ( $g['dosya'] ?? '' ) ), '/' );
+		if ( ! preg_match( '#^rego-panel/teklif/[A-Za-z0-9/_\-.]+\.(jpe?g|png)$#', $d ) || false !== strpos( $d, '..' ) || ! is_file( $base . $d ) ) {
+			continue;
+		}
+		$out[] = array( 'dosya' => $d, 'aciklama' => sanitize_text_field( $g['aciklama'] ?? '' ) );
+	}
+	return wp_json_encode( $out, JSON_UNESCAPED_UNICODE );
+}
+
 function rego_clean_kosullar( $v ) {
 	$out = array();
 	foreach ( (array) $v as $k ) {
@@ -181,6 +288,10 @@ function rego_panel_register_routes() {
 	register_rest_route( $ns, '/teklif/(?P<id>\d+)/faturala', array(
 		'methods' => 'POST', 'callback' => 'rego_api_teklif_faturala',
 		'permission_callback' => function () { return current_user_can( 'rego_teklif' ) && current_user_can( 'rego_fatura' ); },
+	) );
+	register_rest_route( $ns, '/gorsel', array(
+		'methods' => 'POST', 'callback' => 'rego_api_gorsel',
+		'permission_callback' => function () { return current_user_can( 'rego_teklif' ); },
 	) );
 	register_rest_route( $ns, '/ayarlar', array(
 		'methods' => 'POST', 'callback' => 'rego_api_ayarlar',
@@ -257,6 +368,7 @@ function rego_api_bootstrap() {
 		'logout'   => wp_logout_url( rego_panel_url() ),
 		'admin'    => current_user_can( 'manage_options' ) ? admin_url() : '',
 		'version'  => REGO_PANEL_VERSION,
+		'kisi'     => rego_kisi_list(),
 		'hatirlatma' => rego_hat_list(),
 		'bildirim' => rego_bildirim_payload(),
 	);
@@ -296,6 +408,13 @@ function rego_api_save( $type, $id, WP_REST_Request $req ) {
 	// Field staff may only move a project through its stages; other project fields stay with the office.
 	if ( 'proje' === $type && $id && ! current_user_can( 'rego_finans' ) && ! current_user_can( 'rego_ayarlar' ) ) {
 		$row = array_intersect_key( $row, array( 'asama' => 1, 'notlar' => 1 ) );
+	}
+
+	if ( 'teklif' === $type && isset( $row['kisiler'] ) ) {
+		$ks                = json_decode( $row['kisiler'], true ) ?: array();
+		$row['kisi']       = implode( ' / ', array_column( $ks, 'ad' ) );
+		$row['kisi_email'] = implode( ' / ', array_filter( array_column( $ks, 'email' ) ) );
+		$row['kisi_tel']   = implode( ' / ', array_filter( array_column( $ks, 'tel' ) ) );
 	}
 
 	// A quote may name a firm that is not a customer yet: create the customer from the quote's contact.
@@ -362,6 +481,18 @@ function rego_api_save( $type, $id, WP_REST_Request $req ) {
 			$out['extra'] = $next;
 		}
 	}
+	if ( 'musteri' === $type && isset( $params['kisiler'] ) ) {
+		rego_kisi_sync( $id, $params['kisiler'] );
+		$out['item'] = rego_api_get( 'musteri', $id );
+	}
+	if ( 'teklif' === $type && ! empty( $out['item']['musteri_id'] ) && ! empty( $out['item']['kisiler'] ) ) {
+		rego_kisi_ekle_eksik( $out['item']['musteri_id'], $out['item']['kisiler'] );
+	}
+	if ( 'musteri' === $type || 'teklif' === $type ) {
+		$mid        = 'musteri' === $type ? $id : (int) $out['item']['musteri_id'];
+		$out['kisi'] = $mid ? rego_kisi_list( $mid ) : array();
+		$out['musteri_id'] = $mid;
+	}
 	if ( in_array( $type, array( 'saha', 'hareket', 'proje' ), true ) ) {
 		$hr = isset( $params['hatirlatma'] ) && is_array( $params['hatirlatma'] ) ? $params['hatirlatma'] : null;
 		rego_hat_kaydet_kayit( $type, $out['item'], $hr );
@@ -401,6 +532,9 @@ function rego_api_delete( $type, $id ) {
 	global $wpdb;
 	$wpdb->delete( rego_t( $type ), array( 'id' => $id ) );
 	$wpdb->delete( rego_t( 'hatirlatma' ), array( 'kaynak' => $type, 'kaynak_id' => $id, 'durum' => 'bekliyor' ) );
+	if ( 'musteri' === $type ) {
+		$wpdb->delete( rego_t( 'kisi' ), array( 'musteri_id' => $id ) );
+	}
 	return array( 'deleted' => $id );
 }
 
@@ -456,7 +590,7 @@ function rego_api_ayarlar( WP_REST_Request $req ) {
 			$s[ $k ] = sanitize_textarea_field( $p[ $k ] );
 		}
 	}
-	foreach ( array( 'birimler', 'hizmetler', 'gider_kategorileri', 'gelir_kategorileri', 'hesaplar' ) as $k ) {
+	foreach ( array( 'birimler', 'hizmetler', 'gider_kategorileri', 'gelir_kategorileri', 'hesaplar', 'gorevler' ) as $k ) {
 		if ( isset( $p[ $k ] ) ) {
 			$s[ $k ] = array_values( array_filter( array_map( 'sanitize_text_field', (array) $p[ $k ] ) ) );
 		}
@@ -686,4 +820,57 @@ function rego_api_kullanici_rol( WP_REST_Request $req ) {
 		delete_user_meta( $uid, 'rego_pasif' );
 	}
 	return array( 'users' => rego_panel_users() );
+}
+
+/** Uploads one quote image: stored under uploads/rego-panel/teklif, resized to at most 1600 px, saved as JPG or PNG. */
+function rego_api_gorsel( WP_REST_Request $req ) {
+	$files = $req->get_file_params();
+	if ( empty( $files['dosya'] ) || ! empty( $files['dosya']['error'] ) ) {
+		return new WP_Error( 'rego_gorsel', 'Dosya alınamadı. Görsel çok büyük olabilir (sunucu sınırı).', array( 'status' => 400 ) );
+	}
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+	$dir = function ( $u ) {
+		$sub          = '/rego-panel/teklif' . $u['subdir'];
+		$u['path']    = $u['basedir'] . $sub;
+		$u['url']     = $u['baseurl'] . $sub;
+		$u['subdir']  = $sub;
+		return $u;
+	};
+	add_filter( 'upload_dir', $dir );
+	$f = $files['dosya'];
+	$f['name'] = strtolower( wp_generate_password( 14, false ) ) . '.' . strtolower( preg_replace( '/[^A-Za-z0-9]/', '', pathinfo( $f['name'], PATHINFO_EXTENSION ) ) );
+	$res = wp_handle_upload( $f, array(
+		'test_form' => false,
+		'mimes'     => array( 'jpg|jpeg|jpe' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif' ),
+	) );
+	remove_filter( 'upload_dir', $dir );
+	if ( isset( $res['error'] ) ) {
+		return new WP_Error( 'rego_gorsel', 'Görsel yüklenemedi: ' . $res['error'], array( 'status' => 400 ) );
+	}
+	$path = $res['file'];
+	$ed   = wp_get_image_editor( $path );
+	if ( ! is_wp_error( $ed ) ) {
+		$size = $ed->get_size();
+		if ( $size['width'] > 1600 || $size['height'] > 1600 ) {
+			$ed->resize( 1600, 1600, false );
+		}
+		$ext  = strtolower( pathinfo( $path, PATHINFO_EXTENSION ) );
+		$to   = in_array( $ext, array( 'png' ), true ) ? $path : preg_replace( '/\.[^.]+$/', '.jpg', $path );
+		$ed->set_quality( 82 );
+		$saved = $ed->save( $to, 'png' === $ext ? 'image/png' : 'image/jpeg' );
+		if ( ! is_wp_error( $saved ) ) {
+			if ( $saved['path'] !== $path ) {
+				wp_delete_file( $path );
+			}
+			$path = $saved['path'];
+		}
+	}
+	$ext = strtolower( pathinfo( $path, PATHINFO_EXTENSION ) );
+	if ( ! in_array( $ext, array( 'jpg', 'jpeg', 'png' ), true ) ) {
+		wp_delete_file( $path );
+		return new WP_Error( 'rego_gorsel', 'Bu görsel biçimi PDF için çevrilemedi. JPG ya da PNG yükleyin.', array( 'status' => 400 ) );
+	}
+	$up   = wp_upload_dir();
+	$rel  = ltrim( str_replace( wp_normalize_path( $up['basedir'] ), '', wp_normalize_path( $path ) ), '/' );
+	return array( 'dosya' => $rel, 'url' => trailingslashit( $up['baseurl'] ) . $rel, 'aciklama' => '' );
 }

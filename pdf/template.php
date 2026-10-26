@@ -65,6 +65,11 @@ table.k th{background:#d9d9d9;font-weight:bold;font-size:8pt;line-height:1.35;bo
 table.k td{border:1.1pt solid #111;padding:13pt 4pt;text-align:center;vertical-align:middle;font-size:6.7pt;line-height:1.4}
 table.k tr{page-break-inside:avoid}
 .kdv{font-size:5.9pt;margin-top:2pt}
+table.gal{width:100%;border-collapse:separate;border-spacing:8pt 6pt;margin:8pt -8pt 0 -8pt}
+table.gal td{width:50%;vertical-align:top;text-align:center;page-break-inside:avoid}
+.gimg{height:170pt;border:.8pt solid #ddd;border-radius:4pt;padding:4pt;text-align:center}
+.gimg img{max-width:100%;max-height:162pt}
+.gcap{font-family:'Mont';font-size:6.8pt;color:#444;margin-top:3pt}
 .tot{text-align:right;font-family:'Mont';font-weight:bold;font-size:8pt;margin-top:4pt}
 .kh{font-family:'Mont';font-weight:bold;font-size:10pt;margin:12pt 0 6pt 28pt;padding-bottom:3pt;border-bottom:1pt solid #3d72e6;width:105pt;padding-left:8pt;margin-left:20pt}
 .ko{margin-left:17pt}
@@ -142,6 +147,21 @@ table.foot td{vertical-align:bottom;padding:0}
 	<div class="tot">Toplam (KDV hariç):
 		<?php echo esc_html( implode( '  +  ', array_map( function ( $p, $v ) { return rego_num( $v ) . ' ' . $p; }, array_keys( $t['toplamlar'] ), $t['toplamlar'] ) ) ); ?>
 	</div>
+<?php endif; ?>
+
+<?php if ( ! empty( $t['gorseller'] ) ) : ?>
+	<?php $gdir = trailingslashit( wp_upload_dir()['basedir'] ); ?>
+	<table class="gal">
+	<?php foreach ( array_chunk( $t['gorseller'], 2 ) as $cift ) : ?>
+		<tr>
+		<?php foreach ( $cift as $g ) : ?>
+			<td><div class="gimg"><img src="<?php echo esc_attr( $gdir . $g['dosya'] ); ?>"></div>
+			<?php if ( $g['aciklama'] ) : ?><div class="gcap"><?php echo esc_html( $g['aciklama'] ); ?></div><?php endif; ?></td>
+		<?php endforeach; ?>
+		<?php if ( 1 === count( $cift ) ) : ?><td></td><?php endif; ?>
+		</tr>
+	<?php endforeach; ?>
+	</table>
 <?php endif; ?>
 
 <?php if ( $t['kosullar'] ) : ?>

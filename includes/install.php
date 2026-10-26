@@ -57,6 +57,20 @@ function rego_panel_install_tables() {
 		KEY firma (firma)
 	) $c;" );
 
+	dbDelta( "CREATE TABLE {$p}kisi (
+		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+		musteri_id bigint(20) unsigned NOT NULL,
+		ad varchar(190) NOT NULL DEFAULT '',
+		hitap varchar(20) NOT NULL DEFAULT 'Bey',
+		gorev varchar(60) NOT NULL DEFAULT '',
+		email varchar(190) NOT NULL DEFAULT '',
+		tel varchar(60) NOT NULL DEFAULT '',
+		sira int(11) NOT NULL DEFAULT 0,
+		created_at datetime NOT NULL,
+		PRIMARY KEY  (id),
+		KEY musteri_id (musteri_id)
+	) $c;" );
+
 	dbDelta( "CREATE TABLE {$p}proje (
 		id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 		kod varchar(40) NOT NULL,
@@ -91,6 +105,8 @@ function rego_panel_install_tables() {
 		kosullar longtext NULL,
 		ek_baslik varchar(255) NOT NULL DEFAULT '',
 		ek_metin longtext NULL,
+		kisiler longtext NULL,
+		gorseller longtext NULL,
 		ek_yeni_sayfa tinyint(1) NOT NULL DEFAULT 0,
 		toplam_goster tinyint(1) NOT NULL DEFAULT 0,
 		created_at datetime NOT NULL,
@@ -179,11 +195,11 @@ function rego_panel_default_settings() {
 		'hazirlayanlar'  => array(
 			array( 'ad' => 'Ferit ÖZEN', 'email' => 'ferit@regotechnology.com', 'tel' => '+90 542 430 5866' ),
 			array( 'ad' => 'Kübra BOZKURT', 'email' => '', 'tel' => '' ),
-			array( 'ad' => 'Rego Technology', 'email' => 'info@regotechnology.com', 'tel' => '0850 242 4263' ),
 		),
 		'gider_kategorileri' => array( 'Kira', 'Maaş', 'SGK / Vergi', 'Elektrik, su, doğalgaz', 'İnternet ve telefon', 'Yakıt ve yol', 'Malzeme', 'Yazılım ve lisans', 'Bakım ve onarım', 'Diğer' ),
 		'gelir_kategorileri' => array( 'Hizmet bedeli', 'Cihaz satışı', 'Eğitim', 'Diğer' ),
 		'hesaplar'       => array( 'Banka', 'Nakit', 'Kredi kartı' ),
+		'gorevler'       => array( 'Satın alma', 'Patron / Genel müdür', 'Ar-Ge', 'Kalite', 'Üretim', 'Teknik / Mühendislik', 'Diğer' ),
 		'birimler'       => array( 'Adet', 'Gün', 'Saat', 'Parça', 'Set', 'Lisans', 'Ay' ),
 		'hizmetler'      => array( '3D Tarama', 'Tersine Mühendislik', 'Kalite Kontrol', 'CNC İşleme', 'Cihaz / Yazılım Satışı', 'Eğitim' ),
 		'sablonlar'      => array(
@@ -253,6 +269,7 @@ function rego_panel_activate() {
 		add_option( 'rego_panel_settings', rego_panel_default_settings(), '', false );
 	}
 	rego_panel_create_page();
+	rego_panel_migrate_v5();
 	update_option( 'rego_panel_db_version', REGO_PANEL_DB_VERSION );
 }
 
@@ -263,5 +280,26 @@ function rego_panel_deactivate() {
 function rego_panel_maybe_upgrade() {
 	if ( get_option( 'rego_panel_db_version' ) !== REGO_PANEL_DB_VERSION ) {
 		rego_panel_activate();
+	}
+}
+
+/** v5: one contact row per existing customer contact; company itself is no longer a quote sender. */
+function rego_panel_migrate_v5() {
+	global $wpdb;
+	$k = $wpdb->prefix . 'rego_kisi';
+	$m = $wpdb->prefix . 'rego_musteri';
+	$rows = $wpdb->get_results( "SELECT id, kisi, hitap, email, tel FROM $m WHERE kisi <> ''", ARRAY_A ); // phpcs:ignore
+	foreach ( (array) $rows as $r ) {
+		$has = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $k WHERE musteri_id = %d", $r['id'] ) ); // phpcs:ignore
+		if ( ! $has ) {
+			$wpdb->insert( $k, array( 'musteri_id' => $r['id'], 'ad' => $r['kisi'], 'hitap' => $r['hitap'] ? $r['hitap'] : 'Bey', 'email' => $r['email'], 'tel' => $r['tel'], 'created_at' => current_time( 'mysql' ) ) );
+		}
+	}
+	$s = get_option( 'rego_panel_settings' );
+	if ( is_array( $s ) && ! empty( $s['hazirlayanlar'] ) ) {
+		$s['hazirlayanlar'] = array_values( array_filter( $s['hazirlayanlar'], function ( $h ) {
+			return 'rego technology' !== mb_strtolower( trim( $h['ad'] ?? '' ) );
+		} ) );
+		update_option( 'rego_panel_settings', $s, false );
 	}
 }
