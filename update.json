@@ -1,6 +1,6 @@
 {
-  "version": "1.4.0",
-  "package": "https://github.com/ferit1/rego-panel/archive/d93a7c02025314d40079b7eac974170413c7d6b2.zip",
-  "date": "2026-10-23",
-  "notes": "Hatırlatmalar: saha ziyareti, ödeme ve projelere hatırlatma eklenebilir; zamanı gelince zilde ve masaüstünde bildirim çıkar. Resmi WhatsApp (0850) ayarları hazır, kapalı."
+  "version": "1.5.0",
+  "package": "https://github.com/ferit1/rego-panel/archive/f3a5e150ad667915059ff03c29d57de999fdad92.zip",
+  "date": "2026-10-26",
+  "notes": "Firmalara birden fazla ilgili kişi (görevleriyle) eklenebilir; teklifte birden fazla kişi seçilebilir; tekliflere görsel yüklenir ve PDF'te basılır. Hazırlayan listesinde yalnızca Ferit ve Kübra kaldı."
 }
