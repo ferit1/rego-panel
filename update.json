@@ -1,6 +1,6 @@
 {
-  "version": "1.5.0",
-  "package": "https://github.com/ferit1/rego-panel/archive/f3a5e150ad667915059ff03c29d57de999fdad92.zip",
+  "version": "1.5.1",
+  "package": "https://github.com/ferit1/rego-panel/archive/ee3587230cfce1aff3bf6d67878c357b2559bc0d.zip",
   "date": "2026-10-26",
-  "notes": "Firmalara birden fazla ilgili kişi (görevleriyle) eklenebilir; teklifte birden fazla kişi seçilebilir; tekliflere görsel yüklenir ve PDF'te basılır. Hazırlayan listesinde yalnızca Ferit ve Kübra kaldı."
+  "notes": "Proje, saha, fatura ve gelir pencerelerinde müşteri listesinden '+ Yeni müşteri ekle' ile yerinde müşteri oluşturulur."
 }
