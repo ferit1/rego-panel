@@ -314,3 +314,5 @@ label.f textarea,textarea.inp{resize:vertical;line-height:1.5}
 .gal-add:hover{border-color:var(--accent);background:var(--accent-soft)}
 .gal-add small{color:var(--muted);font-weight:500}
 .gal-add:focus-within{outline:2px solid var(--accent)}
+.yeni-mus{border:1px dashed var(--accent);background:var(--accent-soft);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.yeni-mus label.f input,.yeni-mus label.f select{background:var(--surface)}

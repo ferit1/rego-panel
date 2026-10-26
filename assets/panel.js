@@ -869,7 +869,42 @@
   function opt(listArr, sel, emptyLabel) {
     return (emptyLabel != null ? '<option value="0">' + esc(emptyLabel) + '</option>' : '') + listArr.map(function (x) { return '<option value="' + x[0] + '"' + (String(x[0]) === String(sel) ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('');
   }
-  function musteriOpts(sel, empty) { return opt(list('musteri').map(function (m) { return [m.id, m.firma]; }), sel, empty); }
+  function musteriOpts(sel, empty) {
+    return opt(list('musteri').map(function (m) { return [m.id, m.firma]; }), sel, empty) +
+      (can('rego_musteri_edit') ? '<option value="yeni">+ Yeni müşteri ekle…</option>' : '');
+  }
+  /* "+ Yeni müşteri ekle" inside another form: a short inline form under the select. */
+  function yeniMusteriAc(sel) {
+    var lab = sel.closest('label') || sel;
+    var box = document.getElementById(sel.id + '-yeni');
+    if (sel.value !== 'yeni') { if (box) box.remove(); return; }
+    if (box) return;
+    box = document.createElement('div');
+    box.id = sel.id + '-yeni'; box.className = 'full yeni-mus';
+    box.innerHTML = '<div class="row" style="justify-content:space-between"><h3>Yeni müşteri</h3><span class="hint">Kaydedince müşterilere de eklenir</span></div><div class="form c3">' +
+      fld('Firma adı', '<input id="' + sel.id + '-yf" required placeholder="Örn. Kazani Otomotiv">') +
+      fld('İlgili kişi (isteğe bağlı)', '<input id="' + sel.id + '-yk">') +
+      fld('Görevi', '<select id="' + sel.id + '-yg"><option value="">Seçin</option>' + gorevler().map(function (g) { return '<option>' + esc(g) + '</option>'; }).join('') + '</select>') +
+      fld('Telefon', '<input id="' + sel.id + '-yt" type="tel">') +
+      fld('Şehir', '<input id="' + sel.id + '-ys">') + '</div>';
+    lab.insertAdjacentElement('afterend', box);
+    var f = document.getElementById(sel.id + '-yf'); if (f) f.focus();
+  }
+  /** Resolves the customer id of a select, creating the customer first when "+ Yeni müşteri" is chosen. */
+  function musteriId(selId) {
+    var v = val(selId);
+    if (v !== 'yeni') return Promise.resolve(+v || 0);
+    var ad = val(selId + '-yf');
+    if (!ad) return Promise.reject(new Error('Yeni müşterinin firma adını girin.'));
+    var var_ = list('musteri').find(function (m) { return lc(m.firma) === lc(ad); });
+    if (var_) return Promise.resolve(var_.id);
+    var k = val(selId + '-yk');
+    return api('musteri', 'POST', { firma: ad, sehir: val(selId + '-ys'), kisiler: k ? [{ ad: k, gorev: val(selId + '-yg'), tel: val(selId + '-yt'), hitap: 'Bey' }] : [], tel: k ? '' : val(selId + '-yt') })
+      .then(function (r) { kisiSync(r); upsert('musteri', r.item); return r.item.id; });
+  }
+  function withMus(selId, body, send) {
+    return musteriId(selId).then(function (mid) { body.musteri_id = mid; return send(); });
+  }
 
   function musteriModal(m) {
     var ed = can('rego_musteri_edit');
@@ -928,7 +963,7 @@
         submit: function () {
           if (!val('p-isim')) { toast('Proje adını girin.', true); return false; }
           var body = { ad: val('p-isim'), musteri_id: +val('p-mus'), hizmet: val('p-svc'), asama: val('p-asama'), teslim: val('p-tes'), notlar: val('p-not'), teklif_id: p.teklif_id || 0, hatirlatma: hatVal() };
-          return api(p.id ? 'proje/' + p.id : 'proje', p.id ? 'PUT' : 'POST', body).then(function (r) { hatSync(r); upsert('proje', r.item); toast(p.id ? 'Proje güncellendi' : 'Proje açıldı: ' + r.item.kod); if (!p.id && st.view === 'teklif') go('proje'); else render(); });
+          return withMus('p-mus', body, function () { return api(p.id ? 'proje/' + p.id : 'proje', p.id ? 'PUT' : 'POST', body).then(function (r) { hatSync(r); upsert('proje', r.item); toast(p.id ? 'Proje güncellendi' : 'Proje açıldı: ' + r.item.kod); if (!p.id && st.view === 'teklif') go('proje'); else render(); }); });
         }
       });
   }
@@ -952,7 +987,7 @@
           if (!val('s-is') || !val('s-tarih')) { toast('İş tanımı ve tarih gerekli.', true); return false; }
           var body = { is_tanimi: val('s-is'), musteri_id: +val('s-mus'), proje_id: +val('s-pro'), konum: val('s-konum'), ekip: val('s-ekip'), tarih: val('s-tarih'), saat: val('s-saat'), durum: val('s-durum'), hatirlatma: hatVal() };
           if (body.hatirlatma && body.hatirlatma.kural !== 'yok' && !body.hatirlatma.alicilar.length) { toast('Hatırlatma için en az bir kişi seçin.', true); return false; }
-          return api(s.id ? 'saha/' + s.id : 'saha', s.id ? 'PUT' : 'POST', body).then(function (r) { hatSync(r); upsert('saha', r.item); toast(s.id ? 'Ziyaret güncellendi' : 'Ziyaret planlandı'); render(); });
+          return withMus('s-mus', body, function () { return api(s.id ? 'saha/' + s.id : 'saha', s.id ? 'PUT' : 'POST', body).then(function (r) { hatSync(r); upsert('saha', r.item); toast(s.id ? 'Ziyaret güncellendi' : 'Ziyaret planlandı'); render(); }); });
         }
       });
   }
@@ -973,10 +1008,10 @@
       {
         del: f.id && can('rego_sil') ? function () { return api('fatura/' + f.id, 'DELETE').then(function () { drop('fatura', f.id); toast('Fatura kaydı silindi'); render(); }); } : null,
         submit: function () {
-          if (!+val('f-mus')) { toast('Müşteri seçin.', true); return false; }
+          if (!+val('f-mus') && val('f-mus') !== 'yeni') { toast('Müşteri seçin.', true); return false; }
           var od = $('#f-odendi').checked;
           var body = { musteri_id: +val('f-mus'), no: val('f-no'), tutar: parseNum(val('f-tutar')), para: val('f-para'), tarih: val('f-tarih'), vade: val('f-vade'), odendi: od, odeme_tarihi: od ? (val('f-odt') || today()) : '', notlar: val('f-not'), teklif_id: f.teklif_id || 0 };
-          return api(f.id ? 'fatura/' + f.id : 'fatura', f.id ? 'PUT' : 'POST', body).then(function (r) { upsert('fatura', r.item); toast(f.id ? 'Fatura kaydı güncellendi' : 'Fatura kaydı eklendi'); render(); });
+          return withMus('f-mus', body, function () { return api(f.id ? 'fatura/' + f.id : 'fatura', f.id ? 'PUT' : 'POST', body).then(function (r) { upsert('fatura', r.item); toast(f.id ? 'Fatura kaydı güncellendi' : 'Fatura kaydı eklendi'); render(); }); });
         }
       });
   }
@@ -1010,12 +1045,12 @@
           if (!val('h-acik') && !val('h-kat')) { toast('Açıklama ya da kategori girin.', true); return false; }
           var body = { hatirlatma: hatVal(), tur: gelir ? 'gelir' : 'gider', aciklama: val('h-acik'), tutar: tutar, para: val('h-para'), kategori: val('h-kat'), tarih: val('h-tarih'), durum: val('h-durum'), hesap: val('h-hesap'), musteri_id: gelir ? +val('h-mus') : 0, tekrar: val('h-tekrar'), notlar: val('h-not') };
           if (body.durum === 'odendi' && h.durum !== 'odendi') body.odeme_tarihi = body.tarih <= today() ? body.tarih : today();
-          return api(isNew ? 'hareket' : 'hareket/' + h.id, isNew ? 'POST' : 'PUT', body).then(function (r) {
+          return withMus('h-mus', body, function () { return api(isNew ? 'hareket' : 'hareket/' + h.id, isNew ? 'POST' : 'PUT', body).then(function (r) {
             hatSync(r); upsert('hareket', r.item); if (r.extra) upsert('hareket', r.extra);
             toast(r.extra ? 'Kaydedildi. Sonraki ödeme ' + fmtD(r.extra.tarih) + ' için eklendi.' : (isNew ? 'Kayıt eklendi' : 'Kayıt güncellendi'));
             if (st.view === 'fatura') st.tab.finans = 'kasa';
             render();
-          });
+          }); });
         }
       });
     if (isNew && !gelir) {
@@ -1449,6 +1484,7 @@
 
   function onChange(e) {
     var el = e.target;
+    if (el.tagName === 'SELECT' && /-mus$/.test(el.id)) { yeniMusteriAc(el); return; }
     if (el.id === 'e-gorsel-yukle' && el.files && el.files.length) {
       var files = Array.prototype.slice.call(el.files), E1 = st.forms.E, done = 0;
       var durum = $('#gal-durum'); if (durum) durum.textContent = 'Yükleniyor… 0/' + files.length;

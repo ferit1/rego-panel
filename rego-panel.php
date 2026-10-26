@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Rego Panel
  * Description: Rego Technology için müşteri, proje, fiyat teklifi (PDF), tahsilat ve saha randevusu yönetim paneli.
- * Version: 1.5.0
+ * Version: 1.5.1
  * Update URI: https://github.com/ferit1/rego-panel
  * Author: Rego Technology
  * Requires at least: 6.0
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'REGO_PANEL_VERSION', '1.5.0' );
+define( 'REGO_PANEL_VERSION', '1.5.1' );
 define( 'REGO_PANEL_DB_VERSION', '5' );
 define( 'REGO_PANEL_FILE', __FILE__ );
 define( 'REGO_PANEL_DIR', plugin_dir_path( __FILE__ ) );
