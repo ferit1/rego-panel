@@ -349,7 +349,15 @@ function rego_settings_public( $s ) {
 }
 
 function rego_panel_users() {
-	$users  = get_users( array( 'role__in' => array( 'administrator', 'rego_yonetici', 'rego_satis', 'rego_saha' ), 'orderby' => 'display_name' ) );
+	$users  = get_users( array( 'role__in' => array( 'administrator', 'rego_yonetici', 'rego_satis', 'rego_saha' ), 'orderby' => 'display_name', 'fields' => 'all' ) );
+	$seen   = array();
+	$users  = array_values( array_filter( $users, function ( $u ) use ( &$seen ) {
+		if ( isset( $seen[ $u->ID ] ) ) {
+			return false;
+		}
+		$seen[ $u->ID ] = true;
+		return true;
+	} ) );
 	$pasif  = get_users( array( 'meta_key' => 'rego_pasif', 'meta_value' => '1', 'role' => 'subscriber' ) );
 	$out    = array_map( 'rego_user_public', $users );
 	foreach ( $pasif as $u ) {

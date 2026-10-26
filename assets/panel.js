@@ -919,7 +919,7 @@
     var opts = [['rego_yonetici', 'Yönetici'], ['rego_satis', 'Satış'], ['rego_saha', 'Saha ekibi'], ['pasif', 'Pasif (giriş yapamaz)']];
     return '<div class="head"><div><h1>Kullanıcılar</h1><p class="sub">Panel kullanıcıları ve yetkileri</p></div><button class="btn primary" type="button" data-act="kullanici-new">+ Kullanıcı ekle</button></div>' +
       '<section class="panel"><div class="tablewrap"><table class="t"><thead><tr><th>Ad soyad</th><th>E-posta</th><th>Telefon</th><th>Rol</th><th></th></tr></thead><tbody>' +
-      B.users.map(function (u) {
+      B.users.filter(function (u, i, a) { return a.findIndex(function (x) { return x.id === u.id; }) === i; }).map(function (u) {
         var fixed = u.rol === 'administrator' || u.id === B.me.id;
         return '<tr><td class="strong">' + esc(u.ad) + (u.id === B.me.id ? ' <span class="chip c-info">Siz</span>' : '') + '</td><td>' + esc(u.email) + '</td><td class="mono">' + esc(u.tel || '—') + '</td><td>' +
           (fixed ? esc(ROLES[u.rol] || u.rol) : '<select class="inp" style="width:auto" data-act-change="rol" data-id="' + u.id + '" aria-label="' + esc(u.ad) + ' rolü">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (u.rol === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>') + '</td>' +
@@ -1212,11 +1212,20 @@
     return l.length ? l[l.length - 1] : null;
   }
   function fmtDT(s) { if (!s) return ''; var d = new Date(String(s).replace(' ', 'T')); return d.getDate() + ' ' + AY[d.getMonth()] + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
-  function aktifKullanicilar() { return B.users.filter(function (u) { return u.rol !== 'pasif'; }); }
+  function aktifKullanicilar() {
+    var seen = {};
+    return B.users.filter(function (u) { if (u.rol === 'pasif' || seen[u.id]) return false; seen[u.id] = 1; return true; });
+  }
+  /* Name shown in people pickers; two accounts with the same name get their e-mail added. */
+  function kisiEtiket(u) {
+    var ad = displayName(u);
+    var ayni = aktifKullanicilar().filter(function (x) { return x.id !== u.id && lc(displayName(x)) === lc(ad); }).length;
+    return ayni ? ad + ' (' + u.email + ')' : ad;
+  }
   function alicilarHtml(sel) {
     sel = (sel && sel.length) ? sel : [B.me.id];
     return '<div class="alicilar">' + aktifKullanicilar().map(function (u) {
-      return '<label class="check" for="hat-u' + u.id + '"><input type="checkbox" id="hat-u' + u.id + '" class="hat-u" value="' + u.id + '"' + (sel.indexOf(u.id) > -1 ? ' checked' : '') + '> ' + esc(displayName(u)) + '</label>';
+      return '<label class="check" for="hat-u' + u.id + '"><input type="checkbox" id="hat-u' + u.id + '" class="hat-u" value="' + u.id + '"' + (sel.indexOf(u.id) > -1 ? ' checked' : '') + '> ' + esc(kisiEtiket(u)) + (u.id === B.me.id ? ' <span class="muted small">(siz)</span>' : '') + '</label>';
     }).join('') + '</div>';
   }
   function alicilarVal() { return $$('.hat-u').filter(function (c) { return c.checked; }).map(function (c) { return +c.value; }); }
