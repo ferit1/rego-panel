@@ -923,7 +923,7 @@
         var fixed = u.rol === 'administrator' || u.id === B.me.id;
         return '<tr><td class="strong">' + esc(u.ad) + (u.id === B.me.id ? ' <span class="chip c-info">Siz</span>' : '') + '</td><td>' + esc(u.email) + '</td><td class="mono">' + esc(u.tel || '—') + '</td><td>' +
           (fixed ? esc(ROLES[u.rol] || u.rol) : '<select class="inp" style="width:auto" data-act-change="rol" data-id="' + u.id + '" aria-label="' + esc(u.ad) + ' rolü">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (u.rol === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>') + '</td>' +
-          '<td class="r">' + (u.rol !== 'administrator' ? '<button class="btn sm" type="button" data-act="sifre-ver" data-id="' + u.id + '">Şifre ver</button>' : '') + '</td></tr>';
+          '<td class="r"><span class="row" style="justify-content:flex-end;flex-wrap:nowrap">' + (u.rol !== 'administrator' || u.id === B.me.id ? '<button class="btn sm ghost" type="button" data-act="kullanici-duzenle" data-id="' + u.id + '">Düzenle</button>' : '') + (u.rol !== 'administrator' ? '<button class="btn sm" type="button" data-act="sifre-ver" data-id="' + u.id + '">Şifre ver</button>' : '') + '</span></td></tr>';
       }).join('') + '</tbody></table></div></section>' +
       '<section class="grid2 even"><div class="panel"><h2 style="margin-bottom:10px">Roller ne yapabilir?</h2><div class="list">' +
       '<div class="li" style="grid-template-columns:110px minmax(0,1fr)"><b>Yönetici</b><span class="m">Her şey: teklif, tahsilat, proje, saha, kullanıcılar ve ayarlar, kayıt silme.</span></div>' +
@@ -1310,6 +1310,30 @@
       '<button type="button" class="btn sm primary" data-act="hat-new">+ Hatırlatma</button></div>';
   }
 
+  /* An account without a real name shows the company name everywhere; ask once whose account it is. */
+  function adSorModal() {
+    var kullanilan = B.users.filter(function (u) { return u.id !== B.me.id; }).map(function (u) { return lc(u.ad); });
+    var secenek = hazirlayanlar().filter(function (h) { return kullanilan.indexOf(lc(h.ad)) < 0; });
+    modal('Bu hesap kime ait?',
+      '<p style="margin:0">Hesabınızda ad soyad yazılı olmadığı için panelde firma adı görünüyor. Adınızı seçin ya da yazın; hatırlatmalarda, kargo teslimlerinde ve kullanıcı listesinde bu ad görünecek.</p>' +
+      '<div class="stack">' + secenek.map(function (h, i) { return '<label class="check" for="as' + i + '"><input type="radio" name="as" id="as' + i + '" value="' + esc(h.ad) + '" data-tel="' + esc(h.tel || '') + '"' + (i === 0 ? ' checked' : '') + '> ' + esc(h.ad) + '</label>'; }).join('') +
+      '<label class="check" for="as-x"><input type="radio" name="as" id="as-x" value=""' + (secenek.length ? '' : ' checked') + '> Başka bir ad</label>' +
+      '<input class="inp" id="as-ad" placeholder="Ad SOYAD"' + (secenek.length ? ' hidden' : '') + '></div>' +
+      fld('Telefon (WhatsApp hatırlatmaları için)', '<input id="as-tel" type="tel" value="' + esc(B.me.tel || (secenek[0] && secenek[0].tel) || '') + '">'),
+      {
+        ok: 'Kaydet',
+        submit: function () {
+          var r = $('input[name=as]:checked');
+          var ad = r && r.value ? r.value : val('as-ad');
+          if (!ad) { toast('Adınızı yazın.', true); return false; }
+          return api('profil', 'POST', { ad: ad, tel: val('as-tel') }).then(function (res) { B.me = res.me; B.users = res.users; toast('Teşekkürler, ' + ad.split(' ')[0]); shell(); bindShell(); render(); });
+        }
+      });
+    $$('input[name=as]').forEach(function (x) {
+      x.addEventListener('change', function () { $('#as-ad').hidden = x.value !== ''; if (x.value && x.dataset.tel && !val('as-tel')) $('#as-tel').value = x.dataset.tel; if (!x.value) $('#as-ad').focus(); });
+    });
+  }
+
   function profilModal() {
     var me = B.me;
     modal('Profilim',
@@ -1508,6 +1532,15 @@
       case 'fatura-edit': faturaModal(byId('fatura', id)); break;
       case 'fatura-ode': e.stopPropagation(); api('fatura/' + id, 'PUT', { odendi: 1, odeme_tarihi: today() }).then(function (r) { upsert('fatura', r.item); render(); toast('Tahsilat kaydedildi'); }).catch(fail); break;
       case 'kullanici-new': kullaniciModal(); break;
+      case 'kullanici-duzenle':
+        var ku = user(id);
+        modal('Kullanıcıyı düzenle', '<div class="form">' + fld('Ad soyad', '<input id="ku-ad" value="' + esc(ku.ad === ku.login ? '' : ku.ad) + '">', 'full') + fld('Telefon', '<input id="ku-tel" type="tel" value="' + esc(ku.tel || '') + '">') + '<p class="hint" style="margin:0;align-self:end">Giriş e-postası: ' + esc(ku.email) + '</p></div>', {
+          submit: function () {
+            if (!val('ku-ad')) { toast('Ad soyad gerekli.', true); return false; }
+            return api('kullanici/' + ku.id + '/bilgi', 'POST', { ad: val('ku-ad'), tel: val('ku-tel') }).then(function (r) { B.users = r.users; if (ku.id === B.me.id) { B.me = r.me; shell(); bindShell(); } toast('Kullanıcı güncellendi'); render(); });
+          }
+        });
+        break;
       case 'sifre-ver':
         var su = user(id);
         modal('Şifre ver: ' + su.ad, '<div class="form">' + fld('Yeni şifre', '<input id="sv-sifre" type="text" autocomplete="new-password" placeholder="En az 8 karakter">', 'full') + '<p class="hint full" style="margin:0">Giriş için e-posta: ' + esc(su.email) + '. Şifreyi kendisine iletin; Profilim ekranından değiştirebilir.</p></div>', {
@@ -1674,6 +1707,7 @@
       B = b;
       shell(); bindShell();
       st.bilMax = null; bilApply(b.bildirim); 
+      if (!B.me.ad || B.me.ad === B.me.login) setTimeout(adSorModal, 300);
       setInterval(bilPoll, 60000);
       document.addEventListener('visibilitychange', function () { if (!document.hidden) bilPoll(); });
       document.addEventListener('click', onClick);

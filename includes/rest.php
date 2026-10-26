@@ -327,6 +327,10 @@ function rego_panel_register_routes() {
 		'methods' => 'POST', 'callback' => 'rego_api_kullanici',
 		'permission_callback' => function () { return current_user_can( 'rego_kullanici' ); },
 	) );
+	register_rest_route( $ns, '/kullanici/(?P<id>\d+)/bilgi', array(
+		'methods' => 'POST', 'callback' => 'rego_api_kullanici_bilgi',
+		'permission_callback' => function () { return current_user_can( 'rego_kullanici' ); },
+	) );
 	register_rest_route( $ns, '/kullanici/(?P<id>\d+)/sifre', array(
 		'methods' => 'POST', 'callback' => 'rego_api_kullanici_sifre',
 		'permission_callback' => function () { return current_user_can( 'rego_kullanici' ); },
@@ -798,6 +802,25 @@ function rego_api_kullanici( WP_REST_Request $req ) {
 		'users' => rego_panel_users(),
 		'mesaj' => $sent ? 'Kullanıcı eklendi, davet e-postası gönderildi.' : 'Kullanıcı eklendi ancak siteniz e-posta gönderemedi. Kullanıcılar listesinden “Şifre ver” ile şifresini belirleyin.',
 	);
+}
+
+/** Panel managers can correct another user's display name and phone (site administrators only their own). */
+function rego_api_kullanici_bilgi( WP_REST_Request $req ) {
+	$uid = (int) $req['id'];
+	$p   = (array) $req->get_json_params();
+	$u   = get_user_by( 'id', $uid );
+	if ( ! $u || ( $uid !== get_current_user_id() && ! rego_panel_only_user( $u ) ) ) {
+		return new WP_Error( 'rego_yetki', 'Bu kullanıcının bilgileri panelden değiştirilemez.', array( 'status' => 400 ) );
+	}
+	$ad = sanitize_text_field( $p['ad'] ?? '' );
+	if ( '' === $ad ) {
+		return new WP_Error( 'rego_eksik', 'Ad soyad gerekli.', array( 'status' => 400 ) );
+	}
+	wp_update_user( array( 'ID' => $uid, 'display_name' => $ad ) );
+	if ( isset( $p['tel'] ) ) {
+		update_user_meta( $uid, 'rego_tel', sanitize_text_field( $p['tel'] ) );
+	}
+	return array( 'users' => rego_panel_users(), 'me' => rego_user_public( wp_get_current_user() ) );
 }
 
 /** Lets a panel manager set a password for a panel user (useful when the site cannot send e-mail). */
