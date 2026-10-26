@@ -1,6 +1,6 @@
 {
-  "version": "1.5.1",
-  "package": "https://github.com/ferit1/rego-panel/archive/ee3587230cfce1aff3bf6d67878c357b2559bc0d.zip",
+  "version": "1.6.0",
+  "package": "https://github.com/ferit1/rego-panel/archive/7cbfa134b8bde2f693e695c095a9a622c027869c.zip",
   "date": "2026-10-26",
-  "notes": "Proje, saha, fatura ve gelir pencerelerinde müşteri listesinden '+ Yeni müşteri ekle' ile yerinde müşteri oluşturulur."
+  "notes": "Kargo bölümü: gelen ve giden kargolar, kargo firması ve takip no, teslim yeri/kişisi/tarihi. Ana panelde Kargolar kutusu, takvimde kargo günleri."
 }
