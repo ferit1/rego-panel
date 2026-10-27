@@ -4,6 +4,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 nocache_headers();
+// Keep page caches (LiteSpeed, WP Rocket, others honouring DONOTCACHEPAGE) away from the panel: it carries a per-user security key.
+if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+	define( 'DONOTCACHEPAGE', true );
+}
+do_action( 'litespeed_control_set_nocache', 'rego panel' );
+header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private' );
 $user   = wp_get_current_user();
 $logged = $user->exists();
 $access = $logged && current_user_can( 'rego_access' );
@@ -57,6 +63,7 @@ $msg    = array(
 	window.REGO = <?php echo wp_json_encode( array(
 		'api'   => esc_url_raw( rest_url( 'rego/v1/' ) ),
 		'nonce' => wp_create_nonce( 'wp_rest' ),
+		'ajax'  => admin_url( 'admin-ajax.php' ),
 		'logo'  => REGO_PANEL_URL . 'assets/logo.png',
 		'home'  => home_url( '/' ),
 	) ); ?>;

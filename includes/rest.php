@@ -307,6 +307,10 @@ function rego_panel_register_routes() {
 		'methods' => 'POST', 'callback' => 'rego_api_teklif_faturala',
 		'permission_callback' => function () { return current_user_can( 'rego_teklif' ) && current_user_can( 'rego_fatura' ); },
 	) );
+	register_rest_route( $ns, '/nonces', array(
+		'methods' => 'GET', 'callback' => function () { return array( 'pdf_nonce' => wp_create_nonce( 'rego_teklif_pdf' ) ); },
+		'permission_callback' => function () { return current_user_can( 'rego_access' ); },
+	) );
 	register_rest_route( $ns, '/gorsel', array(
 		'methods' => 'POST', 'callback' => 'rego_api_gorsel',
 		'permission_callback' => function () { return current_user_can( 'rego_teklif' ); },

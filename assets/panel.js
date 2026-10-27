@@ -75,11 +75,37 @@
     setTimeout(function () { t.remove(); }, err ? 4200 : 2400);
   }
 
-  function api(path, method, body) {
-    var opt = { method: method || 'GET', credentials: 'same-origin', headers: { 'X-WP-Nonce': C.nonce } };
+  /* WordPress security keys (nonces) expire after 12–24 hours; a tab left open overnight gets a new one silently. */
+  var nonceYenileniyor = null;
+  function nonceYenile() {
+    if (!nonceYenileniyor) {
+      nonceYenileniyor = fetch((C.ajax || '/wp-admin/admin-ajax.php') + '?action=rest-nonce', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.text(); })
+        .then(function (t) {
+          t = String(t || '').trim();
+          if (!t || t === '0' || t === '-1' || t.length > 20) return false; // logged out
+          C.nonce = t;
+          if (B) api('nonces').then(function (n) { B.pdf_nonce = n.pdf_nonce; }).catch(function () {});
+          return true;
+        })
+        .catch(function () { return false; })
+        .then(function (ok) { nonceYenileniyor = null; return ok; });
+    }
+    return nonceYenileniyor;
+  }
+  function api(path, method, body, tekrar) {
+    var opt = { method: method || 'GET', credentials: 'same-origin', cache: 'no-store', headers: { 'X-WP-Nonce': C.nonce } };
     if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
     return fetch(C.api + path, opt).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
+        var nonceSorunu = r.status === 401 || (j && j.code === 'rest_cookie_invalid_nonce');
+        if (nonceSorunu && !tekrar) {
+          return nonceYenile().then(function (ok) {
+            if (ok) return api(path, method, body, true);
+            st.oturumKapandi = true;
+            throw new Error('Oturumunuz kapandı. Sayfayı yenileyip yeniden giriş yapın.');
+          });
+        }
         if (!r.ok) {
           var m = j && j.message ? String(j.message).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : 'İşlem tamamlanamadı (' + r.status + ').';
           if (j && j.code === 'internal_server_error') m = 'Sunucuda bir hata oluştu. WordPress yöneticisine gelen “Teknik sorun” e-postasında ayrıntı yazar.';
@@ -1739,11 +1765,13 @@
   function boot() {
     api('bootstrap').then(function (b) {
       B = b;
+      try { sessionStorage.removeItem('rego_reload'); } catch (x) {}
       shell(); bindShell();
       st.bilMax = null; bilApply(b.bildirim); 
       if (!B.me.ad || B.me.ad === B.me.login) setTimeout(adSorModal, 300);
       setInterval(bilPoll, 60000);
       document.addEventListener('visibilitychange', function () { if (!document.hidden) bilPoll(); });
+      setInterval(function () { nonceYenile(); }, 6 * 3600 * 1000); // keep keys fresh in long-open tabs
       document.addEventListener('click', onClick);
       document.addEventListener('input', onInput);
       document.addEventListener('change', onChange);
@@ -1781,6 +1809,7 @@
       window.addEventListener('beforeunload', function (e) { if (st.dirty) { e.preventDefault(); e.returnValue = ''; } });
       route();
     }).catch(function (e) {
+      if (st.oturumKapandi && !sessionStorage.getItem('rego_reload')) { try { sessionStorage.setItem('rego_reload', '1'); } catch (x) {} location.reload(); return; }
       document.getElementById('app').innerHTML = '<div class="auth"><div class="auth-card"><h1>Panel açılamadı</h1><p class="sub">' + esc(e.message) + '</p><a class="btn" href="">Sayfayı yenile</a></div></div>';
     });
   }
