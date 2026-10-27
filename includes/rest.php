@@ -319,6 +319,10 @@ function rego_panel_register_routes() {
 		'methods' => 'POST', 'callback' => 'rego_api_ayarlar',
 		'permission_callback' => function () { return current_user_can( 'rego_ayarlar' ); },
 	) );
+	register_rest_route( $ns, '/hazir-kalem', array(
+		'methods' => 'POST', 'callback' => 'rego_api_hazir_kalem',
+		'permission_callback' => function () { return current_user_can( 'rego_teklif' ); },
+	) );
 	register_rest_route( $ns, '/sablon', array(
 		'methods' => 'POST', 'callback' => 'rego_api_sablon',
 		'permission_callback' => function () { return current_user_can( 'rego_teklif' ); },
@@ -633,6 +637,9 @@ function rego_api_ayarlar( WP_REST_Request $req ) {
 	if ( isset( $p['sablonlar'] ) ) {
 		$s['sablonlar'] = rego_clean_sablonlar( $p['sablonlar'] );
 	}
+	if ( isset( $p['hazir_kalemler'] ) ) {
+		$s['hazir_kalemler'] = rego_clean_hazir( $p['hazir_kalemler'] );
+	}
 	if ( isset( $p['hazirlayanlar'] ) ) {
 		$h = array();
 		foreach ( (array) $p['hazirlayanlar'] as $x ) {
@@ -659,6 +666,43 @@ function rego_api_ayarlar( WP_REST_Request $req ) {
 	}
 	update_option( 'rego_panel_settings', $s, false );
 	return array( 'settings' => rego_settings_public( $s ) );
+}
+
+function rego_clean_hazir( $list ) {
+	$out = array();
+	foreach ( (array) $list as $k ) {
+		if ( ! is_array( $k ) ) {
+			continue;
+		}
+		$ad = sanitize_textarea_field( $k['ad'] ?? '' );
+		if ( '' === trim( $ad ) ) {
+			continue;
+		}
+		$out[] = array(
+			'ad'     => $ad,
+			'birim'  => sanitize_text_field( $k['birim'] ?? 'Adet' ),
+			'fiyat'  => round( (float) ( $k['fiyat'] ?? 0 ), 2 ),
+			'para'   => rego_clean_para( $k['para'] ?? '€' ),
+			'teslim' => sanitize_text_field( $k['teslim'] ?? '' ),
+		);
+	}
+	return $out;
+}
+
+/** Adds (or updates by name) one ready-made quote line; open to everyone who writes quotes. */
+function rego_api_hazir_kalem( WP_REST_Request $req ) {
+	$new = rego_clean_hazir( array( (array) $req->get_json_params() ) );
+	if ( ! $new ) {
+		return new WP_Error( 'rego_eksik', 'Kalemin adı boş.', array( 'status' => 400 ) );
+	}
+	$s    = rego_settings();
+	$list = array_values( array_filter( (array) $s['hazir_kalemler'], function ( $x ) use ( $new ) {
+		return mb_strtolower( trim( $x['ad'] ) ) !== mb_strtolower( trim( $new[0]['ad'] ) );
+	} ) );
+	$list[]              = $new[0];
+	$s['hazir_kalemler'] = $list;
+	update_option( 'rego_panel_settings', $s, false );
+	return array( 'hazir_kalemler' => $list );
 }
 
 function rego_clean_sablonlar( $list ) {

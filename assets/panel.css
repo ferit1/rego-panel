@@ -326,3 +326,7 @@ label.f textarea,textarea.inp{resize:vertical;line-height:1.5}
 @media (max-width:760px){.kteslim{grid-template-columns:minmax(0,1fr)}}
 .firma-satir{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}
 #e-firma-durum{margin-top:6px}
+.kalem-sec{margin-bottom:6px;font-size:13px}
+.item .c-x{display:flex;flex-direction:column;gap:2px}
+.hk-row{display:grid;grid-template-columns:minmax(200px,2.4fr) 100px 120px 80px 120px 30px;gap:8px;align-items:end;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+@media (max-width:900px){.hk-row{grid-template-columns:repeat(2,minmax(0,1fr))}.hk-row label:first-child{grid-column:1/-1}}

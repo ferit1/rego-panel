@@ -571,14 +571,14 @@
       '<div class="item-h"><span>No</span><span>Ürün veya hizmet</span><span>Miktar</span><span>Birim</span><span>Birim fiyat</span><span>Para</span><span>Teslim süresi</span><span class="r">Toplam</span><span></span></div>' +
       '<div class="items">' + E.kalemler.map(function (k, i) {
         return '<div class="item"><span class="no">' + (i + 1) + '</span>' +
-          '<div class="c-urun"><span class="lbl">Ürün veya hizmet</span><textarea class="inp" id="k' + i + '-urun" data-bind="kalemler.' + i + '.ad" data-auto rows="2" aria-label="Ürün veya hizmet ' + (i + 1) + '">' + esc(k.ad) + '</textarea></div>' +
+          '<div class="c-urun"><span class="lbl">Ürün veya hizmet</span>' + kalemSec(k, i) + '<textarea class="inp" id="k' + i + '-urun" data-bind="kalemler.' + i + '.ad" data-auto rows="2" aria-label="Ürün veya hizmet ' + (i + 1) + '">' + esc(k.ad) + '</textarea></div>' +
           '<div class="c-m"><span class="lbl">Miktar</span><input class="inp num" id="k' + i + '-m" data-bind="kalemler.' + i + '.miktar" data-num inputmode="decimal" value="' + esc(num(k.miktar)) + '" aria-label="Miktar"></div>' +
           '<div class="c-b"><span class="lbl">Birim</span><input class="inp" id="k' + i + '-b" data-bind="kalemler.' + i + '.birim" list="dl-birim" value="' + esc(k.birim) + '" aria-label="Birim"></div>' +
           '<div class="c-f"><span class="lbl">Birim fiyat</span><input class="inp num" id="k' + i + '-f" data-bind="kalemler.' + i + '.fiyat" data-num inputmode="decimal" value="' + esc(k.fiyat ? num(k.fiyat) : '') + '" placeholder="0" aria-label="Birim fiyat"></div>' +
           '<div class="c-p"><span class="lbl">Para</span><select class="inp" id="k' + i + '-p" data-bind="kalemler.' + i + '.para" aria-label="Para birimi">' + PARA.map(function (p) { return '<option' + (k.para === p ? ' selected' : '') + '>' + p + '</option>'; }).join('') + '</select></div>' +
           '<div class="c-t"><span class="lbl">Teslim süresi</span><input class="inp" id="k' + i + '-t" data-bind="kalemler.' + i + '.teslim" value="' + esc(k.teslim) + '" placeholder="örn. 15 Gün" aria-label="Teslim süresi"></div>' +
           '<span class="tot" data-tot="' + i + '">' + esc(money((k.miktar || 0) * (k.fiyat || 0), k.para)) + '</span>' +
-          '<span class="c-x"><button class="icon-btn x" type="button" data-act="kalem-del" data-i="' + i + '" aria-label="Kalemi sil" title="Kalemi sil">×</button></span></div>';
+          '<span class="c-x"><button class="icon-btn" type="button" data-act="kalem-kaydet" data-i="' + i + '" aria-label="Hazır listeye kaydet" title="Bu kalemi hazır listeye kaydet">☆</button><button class="icon-btn x" type="button" data-act="kalem-del" data-i="' + i + '" aria-label="Kalemi sil" title="Kalemi sil">×</button></span></div>';
       }).join('') + '</div>' +
       '<div class="row" style="margin-top:12px;justify-content:space-between"><button class="btn sm" type="button" data-act="kalem-add">+ Kalem ekle</button>' +
       '<label class="check" for="e-tg"><input id="e-tg" type="checkbox" data-bind="toplam_goster"' + (E.toplam_goster ? ' checked' : '') + '> PDF’te tablo altına genel toplamı yaz</label></div></section>';
@@ -681,6 +681,15 @@
     }
   }
 
+  function hazirKalemler() { return B.settings.hazir_kalemler || []; }
+  function kalemSec(k, i) {
+    var hs = hazirKalemler(), ad = String(k.ad || '').trim();
+    var sec = ad ? hs.findIndex(function (h) { return h.ad.trim() === ad; }) : (k._diger ? -1 : -2);
+    return '<select class="inp kalem-sec" id="k' + i + '-sec" data-i="' + i + '" aria-label="Hazır kalem seç">' +
+      '<option value=""' + (sec === -2 ? ' selected' : '') + '>Hazır kalemden seç…</option>' +
+      hs.map(function (h, j) { return '<option value="' + j + '"' + (sec === j ? ' selected' : '') + '>' + esc(h.ad.replace(/\s*\n\s*/g, ' ')) + '</option>'; }).join('') +
+      '<option value="diger"' + (sec === -1 ? ' selected' : '') + '>Diğer (kendim yazacağım)</option></select>';
+  }
   function firmaDurum(E) {
     if (!String(E.firma || '').trim()) return 'Kayıtlı bir firma seçin ya da “+ Yeni müşteri” ile ekleyin.';
     if (E.musteri_id) { var n = kisilerOf(E.musteri_id).length; return '<span style="color:var(--ok);font-weight:700">✓ Kayıtlı müşteri</span>' + (n ? ' · ' + n + ' kayıtlı kişi' : ''); }
@@ -1004,6 +1013,16 @@
           fld('Telefon', '<input id="hz' + i + 't" data-bind="hazirlayanlar.' + i + '.tel" value="' + esc(h.tel) + '">') +
           '<div><button class="btn sm ghost danger" type="button" data-act="hz-del" data-i="' + i + '">Kaldır</button></div></div>';
       }).join('') + '</div></section>' +
+      '<section class="panel"><div class="panel-h"><div><h2>Hazır ürün ve hizmetler</h2><p>Teklif ekranında “Hazır kalemden seç” listesinde çıkar. Fiyatı 0 bırakırsanız teklifte fiyat boş gelir.</p></div><button class="btn sm" type="button" data-act="hk-add">+ Kalem ekle</button></div><div class="stack">' +
+      (S.hazir_kalemler || []).map(function (h, i) {
+        return '<div class="hk-row">' +
+          fld('Ürün veya hizmet', '<textarea id="hk' + i + 'a" data-bind="hazir_kalemler.' + i + '.ad" data-auto rows="1">' + esc(h.ad) + '</textarea>') +
+          fld('Birim', '<input id="hk' + i + 'b" data-bind="hazir_kalemler.' + i + '.birim" list="dl-birim2" value="' + esc(h.birim) + '">') +
+          fld('Birim fiyat', '<input id="hk' + i + 'f" data-bind="hazir_kalemler.' + i + '.fiyat" data-num inputmode="decimal" value="' + esc(h.fiyat ? num(h.fiyat) : '') + '">') +
+          fld('Para', '<select id="hk' + i + 'p" data-bind="hazir_kalemler.' + i + '.para">' + PARA.map(function (x) { return '<option' + (x === h.para ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select>') +
+          fld('Teslim süresi', '<input id="hk' + i + 't" data-bind="hazir_kalemler.' + i + '.teslim" value="' + esc(h.teslim) + '">') +
+          '<button class="icon-btn x" type="button" data-act="hk-del" data-i="' + i + '" aria-label="Kalemi kaldır" title="Kaldır">×</button></div>';
+      }).join('') + '<datalist id="dl-birim2">' + (S.birimler || []).map(function (b) { return '<option value="' + esc(b) + '">'; }).join('') + '</datalist></div></section>' +
       '<section class="panel"><h2 style="margin-bottom:14px">Listeler</h2><div class="form">' +
       fld('Birimler (virgülle ayırın)', '<input id="s-birim" data-bind="birimler" data-csv value="' + esc((S.birimler || []).join(', ')) + '">') +
       fld('Hizmet türleri (virgülle ayırın)', '<input id="s-hizmet" data-bind="hizmetler" data-csv value="' + esc((S.hizmetler || []).join(', ')) + '">') +
@@ -1620,6 +1639,13 @@
 
       /* editor */
       case 'kalem-add': st.forms.E.kalemler.push({ ad: '', miktar: 1, birim: 'Adet', fiyat: 0, para: (st.forms.E.kalemler.slice(-1)[0] || {}).para || '€', teslim: '' }); st.dirty = true; rerenderKos('E'); var n = st.forms.E.kalemler.length - 1; var t = document.getElementById('k' + n + '-urun'); if (t) t.focus(); break;
+      case 'kalem-kaydet':
+        var kk3 = st.forms.E.kalemler[i];
+        if (!String(kk3.ad || '').trim()) { toast('Önce kalemin adını yazın.', true); break; }
+        api('hazir-kalem', 'POST', kk3).then(function (r) { B.settings.hazir_kalemler = r.hazir_kalemler; if (st.forms.S) st.forms.S.hazir_kalemler = clone(r.hazir_kalemler); toast('Hazır listeye kaydedildi'); rerenderEditorKeepFocus('e-firma'); }).catch(fail);
+        break;
+      case 'hk-add': st.forms.S.hazir_kalemler = st.forms.S.hazir_kalemler || []; st.forms.S.hazir_kalemler.push({ ad: '', birim: 'Adet', fiyat: 0, para: '€', teslim: '' }); st.dirty = true; render(); var hk = document.getElementById('hk' + (st.forms.S.hazir_kalemler.length - 1) + 'a'); if (hk) hk.focus(); break;
+      case 'hk-del': st.forms.S.hazir_kalemler.splice(i, 1); st.dirty = true; render(); break;
       case 'kalem-del': if (st.forms.E.kalemler.length > 1) { st.forms.E.kalemler.splice(i, 1); st.dirty = true; rerenderKos('E'); } else toast('Teklifte en az bir kalem olmalı.', true); break;
       case 'kos-add': st.forms[root].kosullar.push({ baslik: '', metin: '' }); if (root === 'E') st.dirty = true; rerenderKos(root); break;
       case 'kos-del': st.forms[root].kosullar.splice(i, 1); if (root === 'E') st.dirty = true; rerenderKos(root); break;
@@ -1720,6 +1746,22 @@
   function onChange(e) {
     var el = e.target;
     if (el.tagName === 'SELECT' && /-mus$/.test(el.id)) { yeniMusteriAc(el); return; }
+    if (el.classList.contains('kalem-sec') && st.forms.E) {
+      var ki = +el.dataset.i, kk2 = st.forms.E.kalemler[ki];
+      if (el.value === 'diger') {
+        if (hazirKalemler().some(function (h) { return h.ad.trim() === String(kk2.ad || '').trim(); })) kk2.ad = '';
+        kk2._diger = true;
+        st.dirty = true; rerenderEditorKeepFocus('k' + ki + '-urun'); return;
+      }
+      var h = hazirKalemler()[+el.value];
+      if (h) {
+        kk2.ad = h.ad; kk2.birim = h.birim || kk2.birim; kk2.para = h.para || kk2.para;
+        if (h.fiyat) kk2.fiyat = h.fiyat;
+        if (h.teslim) kk2.teslim = h.teslim;
+        st.dirty = true; rerenderEditorKeepFocus('k' + ki + '-m');
+      }
+      return;
+    }
     if (el.id === 'e-gorsel-yukle' && el.files && el.files.length) {
       var files = Array.prototype.slice.call(el.files), E1 = st.forms.E, done = 0;
       var durum = $('#gal-durum'); if (durum) durum.textContent = 'Yükleniyor… 0/' + files.length;
