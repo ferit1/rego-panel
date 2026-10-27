@@ -532,7 +532,8 @@
     var kayitli = E.musteri_id ? kisilerOf(E.musteri_id).filter(function (k) { return !E.kisiler.some(function (x) { return lc(x.ad) === lc(k.ad); }); }) : [];
     var musteri = '<section class="panel"><div class="sec-h"><h2>Firma ve ilgili kişiler</h2><span class="hint">Kayıtlı firmayı seçince kişileri gelir. Yeni firma ve kişiler, kaydedince müşterilere eklenir.</span></div>' +
       '<div class="form">' +
-      fld('Firma', '<input id="e-firma" data-bind="firma" list="dl-firma" value="' + esc(E.firma) + '" required autocomplete="off">', 'full') + '</div>' +
+      '<div class="full"><div class="firma-satir">' + fld('Firma', '<input id="e-firma" data-bind="firma" list="dl-firma" value="' + esc(E.firma) + '" required autocomplete="off" placeholder="Firma adını yazın ya da listeden seçin">') +
+      '<button class="btn" type="button" data-act="e-yeni-mus">+ Yeni müşteri</button></div><div class="hint" id="e-firma-durum">' + firmaDurum(E) + '</div></div></div>' +
       '<div id="e-kisiler">' + kisiRows(E.kisiler, 'ek') + '</div>' +
       '<div class="row" style="margin-top:10px"><button class="btn sm" type="button" data-act="kisi-add">+ Kişi ekle</button>' +
       (kayitli.length ? '<select class="inp" id="e-kayitli" style="width:auto"><option value="">Firmanın kayıtlı kişilerinden ekle…</option>' + kayitli.map(function (k) { return '<option value="' + k.id + '">' + esc(k.ad + (k.gorev ? ' – ' + k.gorev : '')) + '</option>'; }).join('') + '</select>' : '') + '</div>' +
@@ -644,6 +645,7 @@
         return;
       }
     }
+    if (p === 'firma') { var fd = $('#e-firma-durum'); if (fd) fd.innerHTML = firmaDurum(E); }
     if (p === 'hitap') E._hitapManual = el.value.trim() !== '' && el.value !== autoHitap(E);
     if (/^kisiler\./.test(p) && !E._hitapManual) { E.hitap = autoHitap(E); var hi = $('#e-hitap'); if (hi) hi.value = E.hitap; }
     if (/^kalemler\./.test(p)) {
@@ -653,6 +655,11 @@
     }
   }
 
+  function firmaDurum(E) {
+    if (!String(E.firma || '').trim()) return 'Kayıtlı bir firma seçin ya da “+ Yeni müşteri” ile ekleyin.';
+    if (E.musteri_id) { var n = kisilerOf(E.musteri_id).length; return '<span style="color:var(--ok);font-weight:700">✓ Kayıtlı müşteri</span>' + (n ? ' · ' + n + ' kayıtlı kişi' : ''); }
+    return '<span style="color:var(--accent);font-weight:700">Yeni müşteri</span> · teklif kaydedilince müşterilere eklenecek. Şehir, sektör gibi bilgileri girmek için “+ Yeni müşteri”yi kullanın.';
+  }
   function rerenderEditorKeepFocus(id) {
     var el = document.getElementById(id), pos = el && el.selectionStart, y = window.scrollY;
     render(); window.scrollTo(0, y);
@@ -1044,7 +1051,7 @@
     return musteriId(selId).then(function (mid) { body.musteri_id = mid; return send(); });
   }
 
-  function musteriModal(m) {
+  function musteriModal(m, onSaved) {
     var ed = can('rego_musteri_edit');
     m = m || { firma: '', kisi: '', hitap: 'Bey', email: '', tel: '', sehir: '', sektor: '', notlar: '' };
     var extra = '';
@@ -1078,7 +1085,7 @@
           if (!val('m-firma')) { toast('Firma adını girin.', true); return false; }
           var ks = st.forms.M.kisiler.filter(function (k) { return String(k.ad || '').trim(); });
           return api(m.id ? 'musteri/' + m.id : 'musteri', m.id ? 'PUT' : 'POST', { firma: val('m-firma'), kisiler: ks, email: val('m-email'), tel: val('m-tel'), sehir: val('m-sehir'), sektor: val('m-sektor'), notlar: val('m-not') })
-            .then(function (r) { kisiSync(r); upsert('musteri', r.item); toast(m.id ? 'Müşteri güncellendi' : 'Müşteri eklendi'); render(); });
+            .then(function (r) { kisiSync(r); upsert('musteri', r.item); toast(m.id ? 'Müşteri güncellendi' : 'Müşteri eklendi'); if (onSaved) onSaved(r.item); render(); });
         }
       });
   }
@@ -1478,6 +1485,24 @@
         break;
       case 'hat-new': closeMenu(); hatModal(); break;
       case 'kargo-new': kargoModal(a.dataset.yon); break;
+      case 'e-yeni-mus':
+        var E4 = st.forms.E;
+        var var4 = list('musteri').find(function (m) { return lc(m.firma) === lc(E4.firma.trim()); });
+        musteriModal(var4 || { firma: E4.firma.trim(), email: '', tel: '', sehir: '', sektor: '', notlar: '' }, function (item) {
+          E4.firma = item.firma; E4.musteri_id = item.id;
+          var ks = kisilerOf(item.id);
+          var bos = !E4.kisiler.some(function (k) { return String(k.ad || '').trim(); });
+          if (ks.length && bos) E4.kisiler = ks.map(function (k) { return { ad: k.ad, hitap: k.hitap || 'Bey', gorev: k.gorev, email: k.email, tel: k.tel }; }).slice(0, 1);
+          else E4.kisiler.forEach(function (q) { var f = ks.find(function (k) { return lc(k.ad) === lc(q.ad); }); if (f) { q.gorev = f.gorev; q.hitap = f.hitap || q.hitap; q.tel = f.tel; q.email = f.email; } });
+          if (!E4._hitapManual) E4.hitap = autoHitap(E4);
+          st.dirty = true;
+        });
+        if (!var4 && E4.kisiler.some(function (k) { return String(k.ad || '').trim(); })) {
+          // Carry the contacts already typed into the quote over to the new customer form.
+          st.forms.M.kisiler = clone(E4.kisiler.filter(function (k) { return String(k.ad || '').trim(); }));
+          $('#m-kisiler').innerHTML = kisiRows(st.forms.M.kisiler, 'mk');
+        }
+        break;
       case 'kargo-edit': kargoModal(null, byId('kargo', id)); break;
       case 'kargo-teslim': kargoHizliModal(byId('kargo', id), 'teslim'); break;
       case 'kargo-gonder': kargoHizliModal(byId('kargo', id), 'gonder'); break;

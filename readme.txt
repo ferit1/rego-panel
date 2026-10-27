@@ -1,7 +1,7 @@
 === Rego Panel ===
 Requires at least: 6.0
 Requires PHP: 7.4
-Stable tag: 1.6.2
+Stable tag: 1.6.3
 License: GPLv2 or later
 
 Rego Technology için müşteri, fiyat teklifi (PDF), proje, tahsilat ve saha randevusu paneli.

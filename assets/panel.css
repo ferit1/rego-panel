@@ -324,3 +324,5 @@ label.f textarea,textarea.inp{resize:vertical;line-height:1.5}
 .kteslim{grid-template-columns:repeat(3,minmax(0,1fr));padding:10px;border-radius:10px;background:var(--ok-soft)}
 .d-kargo{background:#8A63D2}
 @media (max-width:760px){.kteslim{grid-template-columns:minmax(0,1fr)}}
+.firma-satir{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}
+#e-firma-durum{margin-top:6px}
