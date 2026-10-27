@@ -1,6 +1,6 @@
 {
-  "version": "1.6.2",
-  "package": "https://github.com/ferit1/rego-panel/archive/3f0629646ae30a91450540084c8950ca31b758d4.zip",
-  "date": "2026-10-26",
-  "notes": "Kişi listelerinde aynı hesap iki kez görünmez; aynı adlı iki hesabın yanında e-posta yazar, kendi hesabınız (siz) diye işaretlenir."
+  "version": "1.6.3",
+  "package": "https://github.com/ferit1/rego-panel/archive/9bd040a9f6624fe794d88d452fcf8450cf01bcfe.zip",
+  "date": "2026-10-27",
+  "notes": "Teklif ekranında Firma kutusunun yanında '+ Yeni müşteri' düğmesi; kaydedilen firma ve kişileri teklife gelir."
 }
