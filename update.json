@@ -1,6 +1,6 @@
 {
-  "version": "1.6.3",
-  "package": "https://github.com/ferit1/rego-panel/archive/9bd040a9f6624fe794d88d452fcf8450cf01bcfe.zip",
+  "version": "1.6.4",
+  "package": "https://github.com/ferit1/rego-panel/archive/966aebf88d9aa2b2898e36733e2e9a3050debada.zip",
   "date": "2026-10-27",
-  "notes": "Teklif ekranında Firma kutusunun yanında '+ Yeni müşteri' düğmesi; kaydedilen firma ve kişileri teklife gelir."
+  "notes": "Uzun süre açık kalan sekmede 'Oturumunuz sona erdi' hatası artık çıkmaz: panel güvenlik anahtarını kendisi yeniler. Panel sayfası önbelleğe alınmaz."
 }
