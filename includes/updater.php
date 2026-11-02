@@ -22,7 +22,14 @@ function rego_upd_remote( $force = false ) {
 	if ( ! $force && is_array( $cached ) ) {
 		return $cached;
 	}
-	$res = wp_remote_get( REGO_PANEL_MANIFEST . '?t=' . time(), array( 'timeout' => 10, 'headers' => array( 'Accept' => 'application/json' ) ) );
+	// GitHub's API answers without the ~5 minute CDN delay of raw files; fall back to the raw file if the API refuses (rate limit).
+	$res = wp_remote_get( 'https://api.github.com/repos/' . REGO_PANEL_REPO . '/contents/update.json?ref=main', array(
+		'timeout' => 10,
+		'headers' => array( 'Accept' => 'application/vnd.github.raw+json', 'User-Agent' => 'rego-panel/' . REGO_PANEL_VERSION ),
+	) );
+	if ( defined( 'REGO_PANEL_MANIFEST_LOCAL' ) || is_wp_error( $res ) || 200 !== wp_remote_retrieve_response_code( $res ) || ! is_array( json_decode( wp_remote_retrieve_body( $res ), true ) ) ) {
+		$res = wp_remote_get( REGO_PANEL_MANIFEST . '?t=' . time(), array( 'timeout' => 10, 'headers' => array( 'Accept' => 'application/json' ) ) );
+	}
 	if ( is_wp_error( $res ) || 200 !== wp_remote_retrieve_response_code( $res ) ) {
 		set_site_transient( 'rego_panel_update', array( 'error' => is_wp_error( $res ) ? $res->get_error_message() : 'HTTP ' . wp_remote_retrieve_response_code( $res ) ), HOUR_IN_SECONDS );
 		return get_site_transient( 'rego_panel_update' );
