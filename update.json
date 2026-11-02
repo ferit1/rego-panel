@@ -1,6 +1,6 @@
 {
-  "version": "1.7.2",
-  "package": "https://github.com/ferit1/rego-panel/archive/567dc143c640465f92fc86224bccaa9190fa1bed.zip",
+  "version": "1.7.3",
+  "package": "https://github.com/ferit1/rego-panel/archive/1805f57b3a6a06c94669ec7f9dd0e8da185fd05e.zip",
   "date": "2026-11-02",
-  "notes": "Teklif kalemlerinde birim artık listeden seçilir: Adet, Gün, Saat."
+  "notes": "PDF'teki KDV notunda '%20' tekrar görünür. Koşul, kalem ve ayar metinlerine yazılan % ifadeleri artık silinmez."
 }
