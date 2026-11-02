@@ -235,7 +235,7 @@ function rego_panel_default_settings() {
 			array( 'ad' => 'CNC İşleme', 'birim' => 'Adet', 'fiyat' => 0, 'para' => '₺', 'teslim' => '' ),
 		),
 		'kargo_firmalari' => array( 'Yurtiçi Kargo', 'Aras Kargo', 'MNG Kargo', 'PTT Kargo', 'Sürat Kargo', 'DHL', 'UPS', 'Kurye', 'Elden' ),
-		'birimler'       => array( 'Adet', 'Gün', 'Saat', 'Parça', 'Set', 'Lisans', 'Ay' ),
+		'birimler'       => array( 'Adet', 'Gün', 'Saat' ),
 		'hizmetler'      => array( '3D Tarama', 'Tersine Mühendislik', 'Kalite Kontrol', 'CNC İşleme', 'Cihaz / Yazılım Satışı', 'Eğitim' ),
 		'sablonlar'      => array(
 			rego_sablon_kalite_kontrol(),
@@ -307,6 +307,7 @@ function rego_panel_activate() {
 	rego_panel_create_page();
 	rego_panel_migrate_v5();
 	rego_panel_migrate_v7();
+	rego_panel_migrate_v8();
 	update_option( 'rego_panel_db_version', REGO_PANEL_DB_VERSION );
 }
 
@@ -368,5 +369,20 @@ function rego_panel_migrate_v7() {
 		}
 	}
 	$s['sablonlar'][] = $yeni;
+	update_option( 'rego_panel_settings', $s, false );
+}
+
+/** v8: units are Adet / Gün / Saat; ready-made lines using "Günlük"/"Saatlik" follow. */
+function rego_panel_migrate_v8() {
+	$s = get_option( 'rego_panel_settings' );
+	if ( ! is_array( $s ) ) {
+		return;
+	}
+	$s['birimler'] = array( 'Adet', 'Gün', 'Saat' );
+	$map           = array( 'günlük' => 'Gün', 'saatlik' => 'Saat', 'adet' => 'Adet', 'gün' => 'Gün', 'saat' => 'Saat' );
+	foreach ( (array) ( $s['hazir_kalemler'] ?? array() ) as $i => $h ) {
+		$b = mb_strtolower( trim( $h['birim'] ?? '' ) );
+		$s['hazir_kalemler'][ $i ]['birim'] = $map[ $b ] ?? 'Adet';
+	}
 	update_option( 'rego_panel_settings', $s, false );
 }

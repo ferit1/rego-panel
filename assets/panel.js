@@ -573,7 +573,7 @@
         return '<div class="item"><span class="no">' + (i + 1) + '</span>' +
           '<div class="c-urun"><span class="lbl">Ürün veya hizmet</span>' + kalemSec(k, i) + '<textarea class="inp" id="k' + i + '-urun" data-bind="kalemler.' + i + '.ad" data-auto rows="2" aria-label="Ürün veya hizmet ' + (i + 1) + '">' + esc(k.ad) + '</textarea></div>' +
           '<div class="c-m"><span class="lbl">Miktar</span><input class="inp num" id="k' + i + '-m" data-bind="kalemler.' + i + '.miktar" data-num inputmode="decimal" value="' + esc(num(k.miktar)) + '" aria-label="Miktar"></div>' +
-          '<div class="c-b"><span class="lbl">Birim</span><input class="inp" id="k' + i + '-b" data-bind="kalemler.' + i + '.birim" list="dl-birim" value="' + esc(k.birim) + '" aria-label="Birim"></div>' +
+          '<div class="c-b"><span class="lbl">Birim</span><select class="inp" id="k' + i + '-b" data-bind="kalemler.' + i + '.birim" aria-label="Birim">' + birimOpts(k.birim) + '</select></div>' +
           '<div class="c-f"><span class="lbl">Birim fiyat</span><input class="inp num" id="k' + i + '-f" data-bind="kalemler.' + i + '.fiyat" data-num inputmode="decimal" value="' + esc(k.fiyat ? num(k.fiyat) : '') + '" placeholder="0" aria-label="Birim fiyat"></div>' +
           '<div class="c-p"><span class="lbl">Para</span><select class="inp" id="k' + i + '-p" data-bind="kalemler.' + i + '.para" aria-label="Para birimi">' + PARA.map(function (p) { return '<option' + (k.para === p ? ' selected' : '') + '>' + p + '</option>'; }).join('') + '</select></div>' +
           '<div class="c-t"><span class="lbl">Teslim süresi</span><input class="inp" id="k' + i + '-t" data-bind="kalemler.' + i + '.teslim" value="' + esc(k.teslim) + '" placeholder="örn. 15 Gün" aria-label="Teslim süresi"></div>' +
@@ -681,6 +681,12 @@
     }
   }
 
+  /* Units are a fixed short list; an older value outside it stays selectable on that line. */
+  function birimOpts(cur) {
+    var l = (B.settings.birimler && B.settings.birimler.length ? B.settings.birimler : ['Adet', 'Gün', 'Saat']).slice();
+    if (cur && l.indexOf(cur) < 0) l.push(cur);
+    return l.map(function (b) { return '<option' + (b === cur ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('');
+  }
   function hazirKalemler() { return B.settings.hazir_kalemler || []; }
   function kalemSec(k, i) {
     var hs = hazirKalemler(), ad = String(k.ad || '').trim();
@@ -1017,7 +1023,7 @@
       (S.hazir_kalemler || []).map(function (h, i) {
         return '<div class="hk-row">' +
           fld('Ürün veya hizmet', '<textarea id="hk' + i + 'a" data-bind="hazir_kalemler.' + i + '.ad" data-auto rows="1">' + esc(h.ad) + '</textarea>') +
-          fld('Birim', '<input id="hk' + i + 'b" data-bind="hazir_kalemler.' + i + '.birim" list="dl-birim2" value="' + esc(h.birim) + '">') +
+          fld('Birim', '<select id="hk' + i + 'b" data-bind="hazir_kalemler.' + i + '.birim">' + birimOpts(h.birim) + '</select>') +
           fld('Birim fiyat', '<input id="hk' + i + 'f" data-bind="hazir_kalemler.' + i + '.fiyat" data-num inputmode="decimal" value="' + esc(h.fiyat ? num(h.fiyat) : '') + '">') +
           fld('Para', '<select id="hk' + i + 'p" data-bind="hazir_kalemler.' + i + '.para">' + PARA.map(function (x) { return '<option' + (x === h.para ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select>') +
           fld('Teslim süresi', '<input id="hk' + i + 't" data-bind="hazir_kalemler.' + i + '.teslim" value="' + esc(h.teslim) + '">') +
