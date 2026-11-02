@@ -238,3 +238,21 @@ function rego_teklif_toplam( $kalemler ) {
 	}
 	return $t;
 }
+
+function rego_kdv_orani( $s = null ) {
+	$s = $s ? $s : rego_settings();
+	$o = (float) ( $s['kdv_orani'] ?? 20 );
+	return $o > 0 ? $o : 20;
+}
+
+/** VAT note under the price table, e.g. "... Uygulanacak KDV oranı 20'dir." */
+function rego_kdv_notu( $s = null ) {
+	$s    = $s ? $s : rego_settings();
+	$not  = (string) ( $s['kdv_notu'] ?? '' );
+	$oran = rego_num( rego_kdv_orani( $s ) );
+	if ( false === strpos( $not, '{oran}' ) ) {
+		// An older note without the placeholder: put the rate in place of a lost or missing number.
+		$not = preg_replace( "/KDV oranı\\s*%?\\s*\\d*\\s*['’]?\\s*dir\\.?/u", "KDV oranı {oran}'dir.", $not );
+	}
+	return str_replace( '{oran}', $oran, $not );
+}

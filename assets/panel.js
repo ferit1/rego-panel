@@ -647,7 +647,7 @@
     var ks = PARA.filter(function (p) { return o[p]; });
     if (!ks.length) return '<div class="muted small">Kalem fiyatı girildiğinde toplam burada görünür.</div>';
     return ks.map(function (p) {
-      return '<div><span>Ara toplam</span><b>' + esc(money(o[p], p)) + '</b></div><div class="muted"><span>KDV %20</span><span>' + esc(money(o[p] * 0.2, p)) + '</span></div><div class="g"><span>Genel toplam</span><span>' + esc(money(o[p] * 1.2, p)) + '</span></div>';
+      return '<div><span>Ara toplam</span><b>' + esc(money(o[p], p)) + '</b></div><div class="muted"><span>KDV (' + num(kdvOrani()) + ')</span><span>' + esc(money(o[p] * kdvOrani() / 100, p)) + '</span></div><div class="g"><span>Genel toplam</span><span>' + esc(money(o[p] * (1 + kdvOrani() / 100), p)) + '</span></div>';
     }).join('');
   }
   AFTER.teklif = function () {
@@ -687,6 +687,7 @@
     if (cur && l.indexOf(cur) < 0) l.push(cur);
     return l.map(function (b) { return '<option' + (b === cur ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('');
   }
+  function kdvOrani() { var o = Number(B.settings.kdv_orani); return o > 0 ? o : 20; }
   function hazirKalemler() { return B.settings.hazir_kalemler || []; }
   function kalemSec(k, i) {
     var hs = hazirKalemler(), ad = String(k.ad || '').trim();
@@ -1007,7 +1008,8 @@
       fld('Form başlığı', '<input id="s-baslik" data-bind="teklif_baslik" value="' + esc(S.teklif_baslik) + '">') +
       fld('Teklif no öneki', '<input id="s-onek" data-bind="teklif_onek" value="' + esc(S.teklif_onek) + '">') +
       fld('Giriş metni (hitaptan sonra)', '<textarea id="s-giris" data-bind="giris_metni" data-auto rows="2">' + esc(S.giris_metni) + '</textarea>', 'full') +
-      fld('KDV notu (tablo altı)', '<input id="s-kdv" data-bind="kdv_notu" value="' + esc(S.kdv_notu) + '">', 'full') +
+      fld('KDV oranı', '<input id="s-kdvo" data-bind="kdv_orani" data-num inputmode="decimal" value="' + esc(num(S.kdv_orani || 20)) + '">') +
+      fld('KDV notu (tablo altı)', '<input id="s-kdv" data-bind="kdv_notu" value="' + esc(S.kdv_notu) + '"><span class="hint">{oran} yazan yere KDV oranı gelir. PDF’te: “' + esc(String(S.kdv_notu || '').replace('{oran}', num(S.kdv_orani || 20))) + '”</span>') +
       fld('Sipariş teyidi metni', '<textarea id="s-teyit" data-bind="teyit_metni" data-auto rows="2">' + esc(S.teyit_metni) + '</textarea>') +
       fld('Sipariş teyidi alt satırı', '<input id="s-teyit2" data-bind="teyit_alt" value="' + esc(S.teyit_alt) + '">') +
       '</div></section>' +
@@ -1698,7 +1700,7 @@
       case 'e-faturala':
         var E2 = st.forms.E;
         modal('Fatura kaydı oluştur', '<p class="muted" style="margin:0">Teklif toplamına KDV eklenerek her para birimi için bir fatura kaydı açılır: <b>' + esc(sumTxt(E2.toplamlar || {})) + '</b> + KDV.</p><div class="form">' +
-          fld('KDV oranı (%)', '<input id="fk-kdv" inputmode="decimal" value="20">') + fld('Vade', '<input id="fk-vade" type="date" value="' + addDays(today(), 15) + '">') +
+          fld('KDV oranı', '<input id="fk-kdv" inputmode="decimal" value="' + num(kdvOrani()) + '">') + fld('Vade', '<input id="fk-vade" type="date" value="' + addDays(today(), 15) + '">') +
           fld('e-Fatura no (isteğe bağlı)', '<input id="fk-no">', 'full') + '</div>', {
             ok: 'Oluştur',
             submit: function () {

@@ -637,6 +637,9 @@ function rego_api_ayarlar( WP_REST_Request $req ) {
 	if ( isset( $p['sablonlar'] ) ) {
 		$s['sablonlar'] = rego_clean_sablonlar( $p['sablonlar'] );
 	}
+	if ( isset( $p['kdv_orani'] ) ) {
+		$s['kdv_orani'] = max( 0, min( 100, (float) $p['kdv_orani'] ) ) ?: 20;
+	}
 	if ( isset( $p['hazir_kalemler'] ) ) {
 		$s['hazir_kalemler'] = rego_clean_hazir( $p['hazir_kalemler'] );
 	}

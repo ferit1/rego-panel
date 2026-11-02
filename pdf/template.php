@@ -142,7 +142,7 @@ table.foot td{vertical-align:bottom;padding:0}
 	<?php endforeach; ?>
 	</tbody>
 </table>
-<div class="kdv"><?php echo esc_html( $s['kdv_notu'] ); ?></div>
+<div class="kdv"><?php echo esc_html( rego_kdv_notu( $s ) ); ?></div>
 <?php if ( $t['toplam_goster'] && $t['toplamlar'] ) : ?>
 	<div class="tot">Toplam (KDV hariç):
 		<?php echo esc_html( implode( '  +  ', array_map( function ( $p, $v ) { return rego_num( $v ) . ' ' . $p; }, array_keys( $t['toplamlar'] ), $t['toplamlar'] ) ) ); ?>

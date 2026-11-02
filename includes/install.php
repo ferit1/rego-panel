@@ -206,7 +206,8 @@ function rego_panel_default_settings() {
 		'teklif_baslik'  => 'Mühendislik Hizmetleri Teklif Formu',
 		'teklif_onek'    => 'RT',
 		'giris_metni'    => 'Teklif isteğiniz için teşekkür ederiz. Talep, istek ve bilgi almak isterseniz bizimle iletişime geçebilirsiniz. Değerli siparişlerinizi bekler, iyi çalışmalar dileriz.',
-		'kdv_notu'       => "*Birim fiyatlarına KDV dahil değildir. Uygulanacak KDV oranı %20'dir.",
+		'kdv_orani'      => 20,
+		'kdv_notu'       => "*Birim fiyatlarına KDV dahil değildir. Uygulanacak KDV oranı {oran}'dir.",
 		'teyit_metni'    => 'Teklif formu dahilinde verilen ürün, fiyat ve adetleri onayladığımızı, Teklif Koşullarının tarafımızca okunduğunu ve kabul edildiğini beyan ederiz.',
 		'teyit_alt'      => 'Yetkili kişi imzası varsa kaşe',
 		'wa_aktif'       => 0,
@@ -309,6 +310,7 @@ function rego_panel_activate() {
 	rego_panel_migrate_v7();
 	rego_panel_migrate_v8();
 	rego_panel_migrate_v9();
+	rego_panel_migrate_v10();
 	update_option( 'rego_panel_db_version', REGO_PANEL_DB_VERSION );
 }
 
@@ -398,4 +400,17 @@ function rego_panel_migrate_v9() {
 		$s['kdv_notu'] = preg_replace( "/KDV oranı\s*'?dir\.?/u", "KDV oranı %20'dir.", $s['kdv_notu'] );
 		update_option( 'rego_panel_settings', $s, false );
 	}
+}
+
+/** v10: the VAT rate is its own setting; the note shows it where {oran} stands. */
+function rego_panel_migrate_v10() {
+	$s = get_option( 'rego_panel_settings' );
+	if ( ! is_array( $s ) ) {
+		return;
+	}
+	if ( empty( $s['kdv_orani'] ) ) {
+		$s['kdv_orani'] = 20;
+	}
+	$s['kdv_notu'] = "*Birim fiyatlarına KDV dahil değildir. Uygulanacak KDV oranı {oran}'dir.";
+	update_option( 'rego_panel_settings', $s, false );
 }
