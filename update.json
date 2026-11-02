@@ -1,6 +1,6 @@
 {
-  "version": "1.7.4",
-  "package": "https://github.com/ferit1/rego-panel/archive/b7bb4b522e60e5f8e3015505f114d36dc320f79f.zip",
+  "version": "1.7.5",
+  "package": "https://github.com/ferit1/rego-panel/archive/1ac5404f38e89bdfe67df9758cdaa5abe590b26d.zip",
   "date": "2026-11-02",
-  "notes": "PDF'teki KDV notu 'Uygulanacak KDV oranı 20'dir.' olarak yazılır. KDV oranı Ayarlar'da ayrı bir alan; teklif toplamları ve fatura kaydı bu oranı kullanır."
+  "notes": "KDV notu 'Uygulanacak KDV oranı 20'dir.' olarak yazılır (KDV oranı Ayarlar'da). Güncellemeler gecikmeden görünür."
 }
