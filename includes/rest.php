@@ -8,8 +8,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  * needed to read and to write. Cookie auth + X-WP-Nonce is enforced by WordPress core.
  */
 function rego_resources() {
-	$text  = 'sanitize_text_field';
-	$area  = 'sanitize_textarea_field';
+	$text  = 'rego_text';
+	$area  = 'rego_textarea';
 	$date  = 'rego_clean_date';
 	$int   = 'absint';
 	return array(
@@ -95,11 +95,11 @@ function rego_resources() {
 
 /* ---------- sanitizers ---------- */
 function rego_clean_date( $v ) {
-	$v = sanitize_text_field( (string) $v );
+	$v = rego_text( (string) $v );
 	return preg_match( '/^\d{4}-\d{2}-\d{2}$/', $v ) ? $v : null;
 }
 function rego_clean_time( $v ) {
-	$v = sanitize_text_field( (string) $v );
+	$v = rego_text( (string) $v );
 	return preg_match( '/^\d{2}:\d{2}$/', $v ) ? $v : '';
 }
 function rego_clean_bool( $v ) {
@@ -138,28 +138,28 @@ function rego_clean_kalemler( $v ) {
 		if ( ! is_array( $k ) ) {
 			continue;
 		}
-		$ad = sanitize_textarea_field( $k['ad'] ?? '' );
+		$ad = rego_textarea( $k['ad'] ?? '' );
 		if ( '' === trim( $ad ) ) {
 			continue;
 		}
 		$out[] = array(
 			'ad'     => $ad,
 			'miktar' => (float) ( $k['miktar'] ?? 1 ),
-			'birim'  => sanitize_text_field( $k['birim'] ?? 'Adet' ),
+			'birim'  => rego_text( $k['birim'] ?? 'Adet' ),
 			'fiyat'  => round( (float) ( $k['fiyat'] ?? 0 ), 2 ),
 			'para'   => rego_clean_para( $k['para'] ?? '₺' ),
-			'teslim' => sanitize_text_field( $k['teslim'] ?? '' ),
+			'teslim' => rego_text( $k['teslim'] ?? '' ),
 		);
 	}
 	return wp_json_encode( $out, JSON_UNESCAPED_UNICODE );
 }
 function rego_clean_kisi( $k ) {
 	return array(
-		'ad'    => sanitize_text_field( $k['ad'] ?? '' ),
+		'ad'    => rego_text( $k['ad'] ?? '' ),
 		'hitap' => in_array( $k['hitap'] ?? '', array( 'Bey', 'Hanım' ), true ) ? $k['hitap'] : 'Bey',
-		'gorev' => sanitize_text_field( $k['gorev'] ?? '' ),
+		'gorev' => rego_text( $k['gorev'] ?? '' ),
 		'email' => sanitize_email( $k['email'] ?? '' ),
-		'tel'   => sanitize_text_field( $k['tel'] ?? '' ),
+		'tel'   => rego_text( $k['tel'] ?? '' ),
 	);
 }
 function rego_clean_teklif_kisiler( $v ) {
@@ -255,7 +255,7 @@ function rego_clean_gorseller( $v ) {
 		if ( ! preg_match( '#^rego-panel/teklif/[A-Za-z0-9/_\-.]+\.(jpe?g|png)$#', $d ) || false !== strpos( $d, '..' ) || ! is_file( $base . $d ) ) {
 			continue;
 		}
-		$out[] = array( 'dosya' => $d, 'aciklama' => sanitize_text_field( $g['aciklama'] ?? '' ) );
+		$out[] = array( 'dosya' => $d, 'aciklama' => rego_text( $g['aciklama'] ?? '' ) );
 	}
 	return wp_json_encode( $out, JSON_UNESCAPED_UNICODE );
 }
@@ -266,8 +266,8 @@ function rego_clean_kosullar( $v ) {
 		if ( ! is_array( $k ) ) {
 			continue;
 		}
-		$b = sanitize_text_field( $k['baslik'] ?? '' );
-		$m = sanitize_textarea_field( $k['metin'] ?? '' );
+		$b = rego_text( $k['baslik'] ?? '' );
+		$m = rego_textarea( $k['metin'] ?? '' );
 		if ( '' === $b && '' === trim( $m ) ) {
 			continue;
 		}
@@ -606,7 +606,7 @@ function rego_api_teklif_faturala( WP_REST_Request $req ) {
 	$items = array();
 	foreach ( $t['toplamlar'] as $para => $tutar ) {
 		$wpdb->insert( rego_t( 'fatura' ), array(
-			'no' => sanitize_text_field( $p['no'] ?? '' ), 'musteri_id' => $t['musteri_id'], 'teklif_id' => $t['id'],
+			'no' => rego_text( $p['no'] ?? '' ), 'musteri_id' => $t['musteri_id'], 'teklif_id' => $t['id'],
 			'tarih' => rego_today(), 'vade' => $vade, 'tutar' => round( $tutar * ( 1 + $kdv / 100 ), 2 ),
 			'para' => $para, 'odendi' => 0, 'created_at' => rego_now(),
 		) );
@@ -621,17 +621,17 @@ function rego_api_ayarlar( WP_REST_Request $req ) {
 	$s = rego_settings();
 	foreach ( array( 'firma_unvan', 'vergi_no', 'telefon', 'email', 'web', 'teklif_baslik', 'teklif_onek', 'teyit_alt' ) as $k ) {
 		if ( isset( $p[ $k ] ) ) {
-			$s[ $k ] = sanitize_text_field( $p[ $k ] );
+			$s[ $k ] = rego_text( $p[ $k ] );
 		}
 	}
 	foreach ( array( 'adres', 'giris_metni', 'kdv_notu', 'teyit_metni' ) as $k ) {
 		if ( isset( $p[ $k ] ) ) {
-			$s[ $k ] = sanitize_textarea_field( $p[ $k ] );
+			$s[ $k ] = rego_textarea( $p[ $k ] );
 		}
 	}
 	foreach ( array( 'birimler', 'hizmetler', 'gider_kategorileri', 'gelir_kategorileri', 'hesaplar', 'gorevler', 'kargo_firmalari' ) as $k ) {
 		if ( isset( $p[ $k ] ) ) {
-			$s[ $k ] = array_values( array_filter( array_map( 'sanitize_text_field', (array) $p[ $k ] ) ) );
+			$s[ $k ] = array_values( array_filter( array_map( 'rego_text', (array) $p[ $k ] ) ) );
 		}
 	}
 	if ( isset( $p['sablonlar'] ) ) {
@@ -643,23 +643,23 @@ function rego_api_ayarlar( WP_REST_Request $req ) {
 	if ( isset( $p['hazirlayanlar'] ) ) {
 		$h = array();
 		foreach ( (array) $p['hazirlayanlar'] as $x ) {
-			$ad = sanitize_text_field( $x['ad'] ?? '' );
+			$ad = rego_text( $x['ad'] ?? '' );
 			if ( '' !== $ad ) {
-				$h[] = array( 'ad' => $ad, 'email' => sanitize_email( $x['email'] ?? '' ), 'tel' => sanitize_text_field( $x['tel'] ?? '' ) );
+				$h[] = array( 'ad' => $ad, 'email' => sanitize_email( $x['email'] ?? '' ), 'tel' => rego_text( $x['tel'] ?? '' ) );
 			}
 		}
 		$s['hazirlayanlar'] = $h;
 	}
 	foreach ( array( 'wa_phone_id', 'wa_sablon', 'wa_dil', 'wa_surum' ) as $k ) {
 		if ( isset( $p[ $k ] ) ) {
-			$s[ $k ] = sanitize_text_field( $p[ $k ] );
+			$s[ $k ] = rego_text( $p[ $k ] );
 		}
 	}
 	if ( isset( $p['wa_aktif'] ) ) {
 		$s['wa_aktif'] = empty( $p['wa_aktif'] ) ? 0 : 1;
 	}
 	if ( ! empty( $p['wa_token'] ) ) {
-		$s['wa_token'] = trim( sanitize_text_field( $p['wa_token'] ) );
+		$s['wa_token'] = trim( rego_text( $p['wa_token'] ) );
 	}
 	if ( ! empty( $p['wa_token_sil'] ) ) {
 		$s['wa_token'] = '';
@@ -674,16 +674,16 @@ function rego_clean_hazir( $list ) {
 		if ( ! is_array( $k ) ) {
 			continue;
 		}
-		$ad = sanitize_textarea_field( $k['ad'] ?? '' );
+		$ad = rego_textarea( $k['ad'] ?? '' );
 		if ( '' === trim( $ad ) ) {
 			continue;
 		}
 		$out[] = array(
 			'ad'     => $ad,
-			'birim'  => sanitize_text_field( $k['birim'] ?? 'Adet' ),
+			'birim'  => rego_text( $k['birim'] ?? 'Adet' ),
 			'fiyat'  => round( (float) ( $k['fiyat'] ?? 0 ), 2 ),
 			'para'   => rego_clean_para( $k['para'] ?? '€' ),
-			'teslim' => sanitize_text_field( $k['teslim'] ?? '' ),
+			'teslim' => rego_text( $k['teslim'] ?? '' ),
 		);
 	}
 	return $out;
@@ -712,10 +712,10 @@ function rego_clean_sablonlar( $list ) {
 			continue;
 		}
 		$out[] = array(
-			'ad'            => sanitize_text_field( $sb['ad'] ),
+			'ad'            => rego_text( $sb['ad'] ),
 			'kosullar'      => json_decode( rego_clean_kosullar( $sb['kosullar'] ?? array() ), true ),
-			'ek_baslik'     => sanitize_text_field( $sb['ek_baslik'] ?? '' ),
-			'ek_metin'      => sanitize_textarea_field( $sb['ek_metin'] ?? '' ),
+			'ek_baslik'     => rego_text( $sb['ek_baslik'] ?? '' ),
+			'ek_metin'      => rego_textarea( $sb['ek_metin'] ?? '' ),
 			'ek_yeni_sayfa' => empty( $sb['ek_yeni_sayfa'] ) ? 0 : 1,
 		);
 	}
@@ -742,7 +742,7 @@ function rego_api_profil( WP_REST_Request $req ) {
 	$uid = get_current_user_id();
 	$upd = array( 'ID' => $uid );
 	if ( ! empty( $p['ad'] ) ) {
-		$upd['display_name'] = sanitize_text_field( $p['ad'] );
+		$upd['display_name'] = rego_text( $p['ad'] );
 	}
 	if ( ! empty( $p['email'] ) && is_email( $p['email'] ) ) {
 		$owner = email_exists( $p['email'] );
@@ -762,7 +762,7 @@ function rego_api_profil( WP_REST_Request $req ) {
 		return $r;
 	}
 	if ( isset( $p['tel'] ) ) {
-		update_user_meta( $uid, 'rego_tel', sanitize_text_field( $p['tel'] ) );
+		update_user_meta( $uid, 'rego_tel', rego_text( $p['tel'] ) );
 	}
 	if ( ! empty( $p['sifre'] ) ) {
 		wp_set_auth_cookie( $uid, true );
@@ -780,8 +780,8 @@ function rego_api_kullanici( WP_REST_Request $req ) {
 	$p     = (array) $req->get_json_params();
 	$rol   = in_array( $p['rol'] ?? '', array( 'rego_yonetici', 'rego_satis', 'rego_saha' ), true ) ? $p['rol'] : 'rego_saha';
 	$mail  = sanitize_email( $p['email'] ?? '' );
-	$ad    = sanitize_text_field( $p['ad'] ?? '' );
-	$tel   = sanitize_text_field( $p['tel'] ?? '' );
+	$ad    = rego_text( $p['ad'] ?? '' );
+	$tel   = rego_text( $p['tel'] ?? '' );
 	$sifre = (string) ( $p['sifre'] ?? '' );
 	if ( ! is_email( $mail ) ) {
 		return new WP_Error( 'rego_email', 'Geçerli bir e-posta adresi girin.', array( 'status' => 400 ) );
@@ -868,13 +868,13 @@ function rego_api_kullanici_bilgi( WP_REST_Request $req ) {
 	if ( ! $u || ( $uid !== get_current_user_id() && ! rego_panel_only_user( $u ) ) ) {
 		return new WP_Error( 'rego_yetki', 'Bu kullanıcının bilgileri panelden değiştirilemez.', array( 'status' => 400 ) );
 	}
-	$ad = sanitize_text_field( $p['ad'] ?? '' );
+	$ad = rego_text( $p['ad'] ?? '' );
 	if ( '' === $ad ) {
 		return new WP_Error( 'rego_eksik', 'Ad soyad gerekli.', array( 'status' => 400 ) );
 	}
 	wp_update_user( array( 'ID' => $uid, 'display_name' => $ad ) );
 	if ( isset( $p['tel'] ) ) {
-		update_user_meta( $uid, 'rego_tel', sanitize_text_field( $p['tel'] ) );
+		update_user_meta( $uid, 'rego_tel', rego_text( $p['tel'] ) );
 	}
 	return array( 'users' => rego_panel_users(), 'me' => rego_user_public( wp_get_current_user() ) );
 }

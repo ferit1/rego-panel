@@ -395,14 +395,14 @@ function rego_bildirim_payload() {
 function rego_hat_genel_kaydet( $id, $p ) {
 	global $wpdb;
 	$t      = rego_t( 'hatirlatma' );
-	$baslik = sanitize_text_field( $p['baslik'] ?? '' );
+	$baslik = rego_text( $p['baslik'] ?? '' );
 	$zaman  = rego_hat_zaman( 'ozel', '', $p['zaman'] ?? '' );
 	if ( '' === $baslik || ! $zaman ) {
 		return new WP_Error( 'rego_eksik', 'Başlık ile tarih ve saat gerekli.', array( 'status' => 400 ) );
 	}
 	$row = array(
 		'kaynak' => 'genel', 'kaynak_id' => 0, 'kural' => 'ozel', 'baslik' => $baslik,
-		'mesaj' => sanitize_textarea_field( $p['mesaj'] ?? '' ), 'zaman' => $zaman,
+		'mesaj' => rego_textarea( $p['mesaj'] ?? '' ), 'zaman' => $zaman,
 		'alicilar' => rego_hat_clean_alicilar( $p['alicilar'] ?? array() ) ?: (string) get_current_user_id(),
 		'durum' => 'bekliyor',
 	);

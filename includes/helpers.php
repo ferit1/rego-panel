@@ -3,6 +3,23 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Like sanitize_text_field / sanitize_textarea_field, but keeps sequences such as "%20"
+ * (WordPress strips them as URL-encoded octets, which turns "KDV %20" into "KDV ").
+ */
+function rego_text( $v ) {
+	$v = wp_check_invalid_utf8( (string) $v );
+	$v = wp_strip_all_tags( $v, true );
+	return trim( preg_replace( '/[\r\n\t ]+/', ' ', $v ) );
+}
+function rego_textarea( $v ) {
+	$v = wp_check_invalid_utf8( (string) $v );
+	$v = str_replace( array( "\r\n", "\r" ), "\n", $v );
+	$v = wp_strip_all_tags( $v );
+	$lines = array_map( function ( $l ) { return rtrim( preg_replace( '/[\t ]+$/', '', $l ) ); }, explode( "\n", $v ) );
+	return trim( implode( "\n", $lines ), "\n" );
+}
+
 function rego_t( $name ) {
 	global $wpdb;
 	return $wpdb->prefix . 'rego_' . $name;

@@ -308,6 +308,7 @@ function rego_panel_activate() {
 	rego_panel_migrate_v5();
 	rego_panel_migrate_v7();
 	rego_panel_migrate_v8();
+	rego_panel_migrate_v9();
 	update_option( 'rego_panel_db_version', REGO_PANEL_DB_VERSION );
 }
 
@@ -385,4 +386,16 @@ function rego_panel_migrate_v8() {
 		$s['hazir_kalemler'][ $i ]['birim'] = $map[ $b ] ?? 'Adet';
 	}
 	update_option( 'rego_panel_settings', $s, false );
+}
+
+/** v9: "%20" was stripped from saved texts; restore the VAT note. */
+function rego_panel_migrate_v9() {
+	$s = get_option( 'rego_panel_settings' );
+	if ( ! is_array( $s ) || empty( $s['kdv_notu'] ) ) {
+		return;
+	}
+	if ( false === strpos( $s['kdv_notu'], '%' ) && false !== mb_strpos( $s['kdv_notu'], 'KDV oranı' ) ) {
+		$s['kdv_notu'] = preg_replace( "/KDV oranı\s*'?dir\.?/u", "KDV oranı %20'dir.", $s['kdv_notu'] );
+		update_option( 'rego_panel_settings', $s, false );
+	}
 }
