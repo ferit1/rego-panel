@@ -662,7 +662,14 @@ function rego_api_ayarlar( WP_REST_Request $req ) {
 		$s['wa_aktif'] = empty( $p['wa_aktif'] ) ? 0 : 1;
 	}
 	if ( ! empty( $p['wa_token'] ) ) {
-		$s['wa_token'] = trim( rego_text( $p['wa_token'] ) );
+		$tok = trim( rego_text( $p['wa_token'] ) );
+		// Meta access tokens start with "EA"; anything else is usually a browser-autofilled password.
+		if ( 0 === strpos( $tok, 'EA' ) && strlen( $tok ) > 40 ) {
+			$s['wa_token'] = $tok;
+		}
+	}
+	if ( isset( $s['wa_phone_id'] ) && '' !== $s['wa_phone_id'] && ! ctype_digit( (string) $s['wa_phone_id'] ) ) {
+		$s['wa_phone_id'] = '';
 	}
 	if ( ! empty( $p['wa_token_sil'] ) ) {
 		$s['wa_token'] = '';

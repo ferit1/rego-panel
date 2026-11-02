@@ -311,6 +311,7 @@ function rego_panel_activate() {
 	rego_panel_migrate_v8();
 	rego_panel_migrate_v9();
 	rego_panel_migrate_v10();
+	rego_panel_migrate_v11();
 	update_option( 'rego_panel_db_version', REGO_PANEL_DB_VERSION );
 }
 
@@ -413,4 +414,25 @@ function rego_panel_migrate_v10() {
 	}
 	$s['kdv_notu'] = "*Birim fiyatlarına KDV dahil değildir. Uygulanacak KDV oranı {oran}'dir.";
 	update_option( 'rego_panel_settings', $s, false );
+}
+
+/** v11: clear browser-autofilled login details that may have been saved into the WhatsApp fields. */
+function rego_panel_migrate_v11() {
+	$s = get_option( 'rego_panel_settings' );
+	if ( ! is_array( $s ) ) {
+		return;
+	}
+	$changed = false;
+	if ( ! empty( $s['wa_phone_id'] ) && ! ctype_digit( (string) $s['wa_phone_id'] ) ) {
+		$s['wa_phone_id'] = '';
+		$changed          = true;
+	}
+	if ( ! empty( $s['wa_token'] ) && ( 0 !== strpos( $s['wa_token'], 'EA' ) || strlen( $s['wa_token'] ) <= 40 ) ) {
+		$s['wa_token'] = '';
+		$s['wa_aktif'] = 0;
+		$changed       = true;
+	}
+	if ( $changed ) {
+		update_option( 'rego_panel_settings', $s, false );
+	}
 }

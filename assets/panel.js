@@ -64,6 +64,15 @@
     t[last] = v;
   }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  /* "Unsaved changes" = the form differs from how it was loaded or last saved (not merely touched). */
+  function formJson(o) { return JSON.stringify(o, function (k, v) { return k.charAt(0) === '_' || k === 'wa_token_var' ? undefined : v; }); }
+  function snap(k) { st.snap = st.snap || {}; st.snap[k] = st.forms[k] ? formJson(st.forms[k]) : null; }
+  function isDirty() {
+    st.snap = st.snap || {};
+    var k = st.view === 'teklif' && st.id ? 'E' : st.view === 'ayarlar' ? 'S' : null;
+    if (!k || !st.forms[k] || st.snap[k] == null) return false;
+    return formJson(st.forms[k]) !== st.snap[k];
+  }
 
   function toast(msg, err) {
     $$('.toast').forEach(function (x) { x.remove(); });
@@ -512,7 +521,11 @@
       E.kisiler.forEach(function (k) { if (!k.hitap) { var m = byId('musteri', t.musteri_id); k.hitap = /Hanım,?$/.test(t.hitap) ? 'Hanım' : ((m && m.hitap) || 'Bey'); } });
       E._hitapManual = !!t.hitap && t.hitap !== autoHitap(E);
     }
+    E.gorseller = E.gorseller || [];
     st.forms.E = E;
+    snap('E');
+    // Rendering fills in a few defaults; take the baseline again once the editor is on screen.
+    setTimeout(function () { if (st.forms.E === E && !st.dirty) snap('E'); }, 0);
     return E;
   }
   function hazirlayanlar() { return (B.settings.hazirlayanlar || []); }
@@ -724,8 +737,11 @@
       kisiSync(r);
       var wasNew = !E.id;
       st.forms.E = clone(r.item); st.forms.E._hitapManual = E._hitapManual;
+      st.forms.E.gorseller = st.forms.E.gorseller || [];
       if (!st.forms.E.kisiler || !st.forms.E.kisiler.length) st.forms.E.kisiler = [blankKisi()];
+      snap('E');
       st.dirty = false;
+      var E2 = st.forms.E; setTimeout(function () { if (st.forms.E === E2 && !st.dirty) snap('E'); }, 0);
       if (wasNew) { history.replaceState(null, '', '#teklif/' + r.item.id); st.id = String(r.item.id); }
       render();
       return r.item;
@@ -982,13 +998,14 @@
   };
 
   VIEWS.ayarlar = function () {
-    var S = st.forms.S || (st.forms.S = clone(B.settings));
+    if (!st.forms.S) { st.forms.S = clone(B.settings); snap('S'); }
+    var S = st.forms.S;
     return '<div class="head"><div><h1>Ayarlar</h1><p class="sub">Teklif formunda görünen firma bilgileri, metinler ve koşul şablonları</p></div><button class="btn primary" type="button" data-act="ayar-save">Ayarları kaydet</button></div>' +
       '<div class="stack" style="gap:16px" data-root="S">' +
       '<section class="panel"><div class="panel-h"><div><h2>Panel sürümü</h2><p id="upd-msg">Yüklü sürüm ' + esc(B.version) + '. Yeni sürümler kendiliğinden kurulur; hemen denetlemek için düğmeyi kullanın.</p></div><div class="row"><button class="btn sm" type="button" data-act="upd-check">Güncellemeleri denetle</button><button class="btn sm primary" type="button" data-act="upd-install" hidden id="upd-btn">Şimdi güncelle</button></div></div></section>' +
       '<section class="panel"><div class="panel-h"><div><h2>WhatsApp bildirimleri (resmi, 0850)</h2><p>Meta WhatsApp Business Platform kurulumu bitince doldurun. O zamana kadar hatırlatmalar yalnızca panelde gelir.</p></div>' + (S.wa_aktif && S.wa_token_var ? '<span class="chip c-ok">Açık</span>' : '<span class="chip c-mute">Kapalı</span>') + '</div><div class="form c3">' +
-      fld('Telefon numarası kimliği (Phone number ID)', '<input id="s-waid" data-bind="wa_phone_id" value="' + esc(S.wa_phone_id || '') + '" inputmode="numeric">') +
-      fld('Kalıcı erişim anahtarı', '<input id="s-watok" data-bind="wa_token" type="password" autocomplete="off" value="" placeholder="' + (S.wa_token_var ? 'Kayıtlı – değiştirmek için yeni anahtarı yapıştırın' : 'EAAG… ile başlar') + '">') +
+      fld('Telefon numarası kimliği (Phone number ID)', '<input id="s-waid" data-bind="wa_phone_id" value="' + esc(S.wa_phone_id || '') + '" inputmode="numeric" autocomplete="off" name="rego-wa-numara-kimligi" data-1p-ignore data-lpignore="true">') +
+      fld('Kalıcı erişim anahtarı', '<input id="s-watok" data-bind="wa_token" type="text" class="gizli" autocomplete="off" name="rego-wa-anahtar" spellcheck="false" data-1p-ignore data-lpignore="true" value="" placeholder="' + (S.wa_token_var ? 'Kayıtlı – değiştirmek için yeni anahtarı yapıştırın' : 'EAAG… ile başlar') + '">') +
       fld('Mesaj şablonu adı', '<input id="s-wasb" data-bind="wa_sablon" value="' + esc(S.wa_sablon || 'rego_hatirlatma') + '">') +
       fld('Şablon dili', '<input id="s-wadil" data-bind="wa_dil" value="' + esc(S.wa_dil || 'tr') + '">') +
       fld('Graph API sürümü', '<input id="s-wasur" data-bind="wa_surum" value="' + esc(S.wa_surum || 'v24.0') + '">') +
@@ -1462,7 +1479,7 @@
     });
   }
   function saveSettings() {
-    return api('ayarlar', 'POST', st.forms.S).then(function (r) { B.settings = r.settings; st.forms.S = clone(r.settings); render(); });
+    return api('ayarlar', 'POST', st.forms.S).then(function (r) { B.settings = r.settings; st.forms.S = clone(r.settings); snap('S'); render(); });
   }
 
   /* ---------- menus ---------- */
@@ -1731,7 +1748,7 @@
         a.disabled = true; $('#upd-msg').textContent = 'Güncelleniyor, lütfen bekleyin…';
         api('guncelleme', 'POST', {}).then(function (r) {
           $('#upd-msg').textContent = r.message; toast(r.message);
-          if (r.updated) setTimeout(function () { location.reload(); }, 1500);
+          if (r.updated) { st.reloading = true; setTimeout(function () { location.reload(); }, 1500); }
         }).catch(function (er) { a.disabled = false; $('#upd-msg').textContent = er.message; fail(er); });
         break;
       case 'wa-test':
@@ -1842,13 +1859,13 @@
         if (cell && cell.matches(':focus-visible')) showCalPop(cell); // keyboard only; taps are handled by click
       });
       window.addEventListener('hashchange', function () {
-        if (st.dirty && !st.leaving) {
+        if (isDirty() && !st.leaving) {
           var target = location.hash;
           st.leaving = true; history.back();
           setTimeout(function () {
             st.leaving = false;
             modal('Kaydedilmemiş değişiklikler', '<p style="margin:0">Bu sayfada kaydetmediğiniz değişiklikler var. Kaydetmeden çıkarsanız kaybolur.</p>', {
-              ok: 'Kaydetmeden çık', submit: function () { st.dirty = false; location.hash = target; }
+              ok: 'Kaydetmeden çık', submit: function () { st.dirty = false; st.forms.S = null; st.forms.E = null; st.snap = {}; location.hash = target; }
             });
           }, 30);
           return;
@@ -1856,7 +1873,7 @@
         if (st.leaving) return;
         route();
       });
-      window.addEventListener('beforeunload', function (e) { if (st.dirty) { e.preventDefault(); e.returnValue = ''; } });
+      window.addEventListener('beforeunload', function (e) { if (!st.reloading && isDirty()) { e.preventDefault(); e.returnValue = ''; } });
       route();
     }).catch(function (e) {
       if (st.oturumKapandi && !sessionStorage.getItem('rego_reload')) { try { sessionStorage.setItem('rego_reload', '1'); } catch (x) {} location.reload(); return; }
