@@ -238,6 +238,7 @@ function rego_panel_default_settings() {
 		'birimler'       => array( 'Adet', 'Gün', 'Saat', 'Parça', 'Set', 'Lisans', 'Ay' ),
 		'hizmetler'      => array( '3D Tarama', 'Tersine Mühendislik', 'Kalite Kontrol', 'CNC İşleme', 'Cihaz / Yazılım Satışı', 'Eğitim' ),
 		'sablonlar'      => array(
+			rego_sablon_kalite_kontrol(),
 			array(
 				'ad'       => 'Tarama ve tersine mühendislik hizmeti',
 				'kosullar' => array(
@@ -305,6 +306,7 @@ function rego_panel_activate() {
 	}
 	rego_panel_create_page();
 	rego_panel_migrate_v5();
+	rego_panel_migrate_v7();
 	update_option( 'rego_panel_db_version', REGO_PANEL_DB_VERSION );
 }
 
@@ -337,4 +339,34 @@ function rego_panel_migrate_v5() {
 		} ) );
 		update_option( 'rego_panel_settings', $s, false );
 	}
+}
+
+/** Quality-control (measurement) terms template. */
+function rego_sablon_kalite_kontrol() {
+	return array(
+		'ad'       => 'Kalite kontrol (3D tarama ile ölçüm)',
+		'kosullar' => array(
+			array( 'baslik' => 'Ödeme Şartları', 'metin' => 'Sipariş olması durumunda ödeme hizmet tesliminden sonra, belirtilen hesaplara peşin olarak yapılacaktır.' ),
+			array( 'baslik' => 'Teslim Süresi', 'metin' => 'Öngörülen teslim tarihleri teklifimizde belirtilmiştir.' ),
+			array( 'baslik' => 'Dataların Teslimi', 'metin' => 'Ölçüm sonuçları; renk haritası (sapma analizi) ve ölçü tablolarını içeren PDF rapor olarak iletilir. Talep edilmesi durumunda tarama verisi (STL) de teslim edilebilir.' ),
+			array( 'baslik' => 'Önemli Notlar', 'metin' => "Verilen teklif fiyatları; parçaların 3D lazer tarayıcı ile taranmasını, CAD verisi ya da referans ölçülerle karşılaştırılmasını ve ölçüm raporunun hazırlanmasını kapsamaktadır.\n- Saatlik ve günlük çalışmalarda tarama firmanızda yerinde yapılır; ölçüm raporu çalışma sırasında sahada hazırlanarak aynı gün teslim edilir.\n- Parça bazlı çalışmalarda parçaların taraması yapılır; ölçüm raporları ofisimizde hazırlanarak teklifte belirtilen teslim süresi içinde e-posta ile iletilir.\nKarşılaştırma için parçalara ait 3D CAD verisi (STEP/IGES) ya da teknik resmin tarafımıza iletilmesi gerekmektedir.\nYerinde tarama için sadece elektrik bağlantısı (220V) istenilmektedir.\nLazer tarama cihazımızın hassasiyeti 0.02mm’dir.\nCihazımıza ait sertifikasyonlara [buradan](https://www.regotechnology.com) ulaşabilirsiniz." ),
+		),
+		'ek_baslik' => '', 'ek_metin' => '', 'ek_yeni_sayfa' => 0,
+	);
+}
+
+/** v7: add the quality-control template to saved settings (once, unless a template with that name exists). */
+function rego_panel_migrate_v7() {
+	$s = get_option( 'rego_panel_settings' );
+	if ( ! is_array( $s ) || ! isset( $s['sablonlar'] ) ) {
+		return; // defaults (which include it) are used
+	}
+	$yeni = rego_sablon_kalite_kontrol();
+	foreach ( (array) $s['sablonlar'] as $sb ) {
+		if ( mb_strtolower( $sb['ad'] ?? '' ) === mb_strtolower( $yeni['ad'] ) ) {
+			return;
+		}
+	}
+	$s['sablonlar'][] = $yeni;
+	update_option( 'rego_panel_settings', $s, false );
 }
