@@ -1,6 +1,6 @@
 {
-  "version": "1.7.1",
-  "package": "https://github.com/ferit1/rego-panel/archive/1c79d02849bbec7b9e3b02a6a335a0f6586823e5.zip",
+  "version": "1.7.2",
+  "package": "https://github.com/ferit1/rego-panel/archive/567dc143c640465f92fc86224bccaa9190fa1bed.zip",
   "date": "2026-11-02",
-  "notes": "Yeni koşul şablonu: Kalite kontrol (3D tarama ile ölçüm). Saatlik/günlük ve parça bazlı çalışmalarda raporun nerede hazırlanıp nasıl teslim edildiğini açıklar."
+  "notes": "Teklif kalemlerinde birim artık listeden seçilir: Adet, Gün, Saat."
 }
