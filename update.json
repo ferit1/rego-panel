@@ -1,6 +1,6 @@
 {
-  "version": "1.8.1",
-  "package": "https://github.com/ferit1/rego-panel/archive/94cb529c8650f5682f4a703a25c0ae39c9763726.zip",
+  "version": "1.8.2",
+  "package": "https://github.com/ferit1/rego-panel/archive/1968c8d50ff8acc3284175e62ee6d57d0f3812d1.zip",
   "date": "2026-11-04",
-  "notes": "Kaşe görseli yenilendi (net, şeffaf). Kaşe eklenince fatura bilgileri/adres artık kaymaz; kaşe fatura bilgilerinin üstüne basılır. Yüklenen kaşe fotoğrafları otomatik kırpılır ve arka planı temizlenir."
+  "notes": "Kaşe küçültüldü ve fatura bilgileri ile Sipariş Teyidi kutusunun arasına alındı; kaşe eklenince alt bölüm aşağı inmez, adres kaymaz."
 }
