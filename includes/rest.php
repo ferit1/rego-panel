@@ -42,7 +42,7 @@ function rego_resources() {
 				'hitap' => $text, 'tarih' => $date, 'gonderen_id' => $int, 'durum' => 'rego_clean_durum',
 				'gonderen_ad' => $text, 'gonderen_email' => 'sanitize_email', 'gonderen_tel' => $text,
 				'kalemler' => 'rego_clean_kalemler', 'kosullar' => 'rego_clean_kosullar', 'kisiler' => 'rego_clean_teklif_kisiler', 'gorseller' => 'rego_clean_gorseller',
-				'ek_baslik' => $text, 'ek_metin' => $area, 'ek_yeni_sayfa' => 'rego_clean_bool', 'toplam_goster' => 'rego_clean_bool',
+				'ek_baslik' => $text, 'ek_metin' => $area, 'ek_yeni_sayfa' => 'rego_clean_bool', 'toplam_goster' => 'rego_clean_bool', 'kase' => 'rego_clean_bool',
 			),
 			'required' => array( 'firma' ),
 		),
@@ -311,6 +311,10 @@ function rego_panel_register_routes() {
 		'methods' => 'GET', 'callback' => function () { return array( 'pdf_nonce' => wp_create_nonce( 'rego_teklif_pdf' ) ); },
 		'permission_callback' => function () { return current_user_can( 'rego_access' ); },
 	) );
+	register_rest_route( $ns, '/kase', array(
+		array( 'methods' => 'POST', 'callback' => 'rego_api_kase_yukle', 'permission_callback' => function () { return current_user_can( 'rego_ayarlar' ); } ),
+		array( 'methods' => 'DELETE', 'callback' => 'rego_api_kase_sil', 'permission_callback' => function () { return current_user_can( 'rego_ayarlar' ); } ),
+	) );
 	register_rest_route( $ns, '/gorsel', array(
 		'methods' => 'POST', 'callback' => 'rego_api_gorsel',
 		'permission_callback' => function () { return current_user_can( 'rego_teklif' ); },
@@ -353,6 +357,8 @@ function rego_panel_register_routes() {
 function rego_settings_public( $s ) {
 	$s['wa_token_var'] = ! empty( $s['wa_token'] );
 	$s['wa_token']     = '';
+	$s['kase_url']     = rego_kase_url( $s );
+	$s['kase_ozel']    = '' !== rego_kase_ozel( $s );
 	return $s;
 }
 
@@ -981,4 +987,70 @@ function rego_api_gorsel( WP_REST_Request $req ) {
 	$up   = wp_upload_dir();
 	$rel  = ltrim( str_replace( wp_normalize_path( $up['basedir'] ), '', wp_normalize_path( $path ) ), '/' );
 	return array( 'dosya' => $rel, 'url' => trailingslashit( $up['baseurl'] ) . $rel, 'aciklama' => '' );
+}
+
+/** Company stamp & signature image used at the bottom of quote PDFs (Ayarlar). */
+function rego_api_kase_yukle( WP_REST_Request $req ) {
+	$files = $req->get_file_params();
+	if ( empty( $files['dosya'] ) || ! empty( $files['dosya']['error'] ) || ! is_uploaded_file( $files['dosya']['tmp_name'] ) ) {
+		return new WP_Error( 'rego_kase', 'Dosya alınamadı.', array( 'status' => 400 ) );
+	}
+	if ( ! function_exists( 'imagecreatefromstring' ) ) {
+		return new WP_Error( 'rego_kase', 'Sunucuda görsel işleme (GD) yok.', array( 'status' => 500 ) );
+	}
+	$im = @imagecreatefromstring( file_get_contents( $files['dosya']['tmp_name'] ) );
+	if ( ! $im ) {
+		return new WP_Error( 'rego_kase', 'Görsel okunamadı. JPG ya da PNG yükleyin.', array( 'status' => 400 ) );
+	}
+	$w = imagesx( $im );
+	$h = imagesy( $im );
+	$k = min( 1, 900 / max( $w, $h ) );
+	$nw = max( 1, (int) round( $w * $k ) );
+	$nh = max( 1, (int) round( $h * $k ) );
+	$out = imagecreatetruecolor( $nw, $nh );
+	imagealphablending( $out, false );
+	imagesavealpha( $out, true );
+	imagefill( $out, 0, 0, imagecolorallocatealpha( $out, 255, 255, 255, 127 ) );
+	imagecopyresampled( $out, $im, 0, 0, 0, 0, $nw, $nh, $w, $h );
+	imagedestroy( $im );
+	// White paper → transparent, so the stamp sits cleanly on the page.
+	for ( $y = 0; $y < $nh; $y++ ) {
+		for ( $x = 0; $x < $nw; $x++ ) {
+			$c   = imagecolorat( $out, $x, $y );
+			$a0  = ( $c >> 24 ) & 0x7F;
+			$r   = ( $c >> 16 ) & 0xFF;
+			$g   = ( $c >> 8 ) & 0xFF;
+			$b   = $c & 0xFF;
+			$lum = ( $r + $g + $b ) / 3;
+			$op  = $lum >= 235 ? 0 : min( 1, ( 235 - $lum ) / 115 );
+			$op  = $op * ( 1 - $a0 / 127 );
+			imagesetpixel( $out, $x, $y, imagecolorallocatealpha( $out, $r, $g, $b, (int) round( 127 * ( 1 - $op ) ) ) );
+		}
+	}
+	$up  = wp_upload_dir();
+	$dir = trailingslashit( $up['basedir'] ) . 'rego-panel/kase';
+	wp_mkdir_p( $dir );
+	$s   = rego_settings();
+	$eski = rego_kase_ozel( $s );
+	$rel = 'rego-panel/kase/kase-' . strtolower( wp_generate_password( 8, false ) ) . '.png';
+	if ( ! imagepng( $out, trailingslashit( $up['basedir'] ) . $rel ) ) {
+		return new WP_Error( 'rego_kase', 'Görsel kaydedilemedi.', array( 'status' => 500 ) );
+	}
+	imagedestroy( $out );
+	if ( $eski ) {
+		wp_delete_file( trailingslashit( $up['basedir'] ) . $eski );
+	}
+	$s['kase_dosya'] = $rel;
+	update_option( 'rego_panel_settings', $s );
+	return array( 'kase_url' => rego_kase_url( $s ), 'kase_ozel' => true );
+}
+function rego_api_kase_sil() {
+	$s   = rego_settings();
+	$eski = rego_kase_ozel( $s );
+	if ( $eski ) {
+		wp_delete_file( trailingslashit( wp_upload_dir()['basedir'] ) . $eski );
+	}
+	$s['kase_dosya'] = '';
+	update_option( 'rego_panel_settings', $s );
+	return array( 'kase_url' => rego_kase_url( $s ), 'kase_ozel' => false );
 }

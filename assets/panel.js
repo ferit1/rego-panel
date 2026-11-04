@@ -65,7 +65,7 @@
   }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   /* "Unsaved changes" = the form differs from how it was loaded or last saved (not merely touched). */
-  function formJson(o) { return JSON.stringify(o, function (k, v) { return k.charAt(0) === '_' || k === 'wa_token_var' ? undefined : v; }); }
+  function formJson(o) { return JSON.stringify(o, function (k, v) { return k.charAt(0) === '_' || k === 'wa_token_var' || k === 'kase_url' || k === 'kase_ozel' ? undefined : v; }); }
   function snap(k) { st.snap = st.snap || {}; st.snap[k] = st.forms[k] ? formJson(st.forms[k]) : null; }
   function isDirty() {
     st.snap = st.snap || {};
@@ -170,6 +170,10 @@
       '<div id="layer"></div>';
   }
 
+  function kaseGuncelle(j) {
+    [B.settings, st.forms.S].forEach(function (o) { if (o) { o.kase_url = j.kase_url + '?v=' + Date.now(); o.kase_ozel = j.kase_ozel; } });
+    if (st.view === 'ayarlar') render();
+  }
   function projeTasi(p, asama) {
     if (!p || p.asama === asama) return;
     var eski = p.asama, ad = (STAGES.find(function (s) { return s[0] === asama; }) || [])[1];
@@ -568,7 +572,7 @@
       tarih: today(), gonderen_id: B.me.id, durum: 'taslak',
       gonderen_ad: defaultHz().ad, gonderen_email: defaultHz().email, gonderen_tel: defaultHz().tel,
       kalemler: [{ ad: '', miktar: 1, birim: 'Adet', fiyat: 0, para: '€', teslim: '' }],
-      kosullar: sb ? clone(sb.kosullar) : [], ek_baslik: sb ? sb.ek_baslik : '', ek_metin: sb ? sb.ek_metin : '', ek_yeni_sayfa: sb ? sb.ek_yeni_sayfa : 0, toplam_goster: 0
+      kosullar: sb ? clone(sb.kosullar) : [], ek_baslik: sb ? sb.ek_baslik : '', ek_metin: sb ? sb.ek_metin : '', ek_yeni_sayfa: sb ? sb.ek_yeni_sayfa : 0, toplam_goster: 0, kase: 0
     };
   }
   function loadEditor() {
@@ -656,7 +660,8 @@
           '<span class="c-x"><button class="icon-btn" type="button" data-act="kalem-kaydet" data-i="' + i + '" aria-label="Hazır listeye kaydet" title="Bu kalemi hazır listeye kaydet">☆</button><button class="icon-btn x" type="button" data-act="kalem-del" data-i="' + i + '" aria-label="Kalemi sil" title="Kalemi sil">×</button></span></div>';
       }).join('') + '</div>' +
       '<div class="row" style="margin-top:12px;justify-content:space-between"><button class="btn sm" type="button" data-act="kalem-add">+ Kalem ekle</button>' +
-      '<label class="check" for="e-tg"><input id="e-tg" type="checkbox" data-bind="toplam_goster"' + (E.toplam_goster ? ' checked' : '') + '> PDF’te tablo altına genel toplamı yaz</label></div></section>';
+      '<div class="row" style="gap:18px;flex-wrap:wrap"><label class="check" for="e-tg"><input id="e-tg" type="checkbox" data-bind="toplam_goster"' + (E.toplam_goster ? ' checked' : '') + '> PDF’te tablo altına genel toplamı yaz</label>' +
+      '<label class="check" for="e-kase"><input id="e-kase" type="checkbox" data-bind="kase"' + (E.kase ? ' checked' : '') + '> PDF’in altına kaşe ve imza ekle</label></div></div></section>';
 
     E.gorseller = E.gorseller || [];
     var gal = '<section class="panel"><div class="sec-h"><h2>Görseller</h2><span class="hint">PDF’te ürün tablosunun altında ikişer ikişer basılır. JPG, PNG ya da WEBP; büyük görseller küçültülür.</span></div>' +
@@ -784,7 +789,7 @@
   }
   function editorPayload(E) {
     var o = {};
-    ['musteri_id', 'firma', 'kisiler', 'hitap', 'tarih', 'gonderen_id', 'gonderen_ad', 'gonderen_email', 'gonderen_tel', 'durum', 'kalemler', 'kosullar', 'gorseller', 'ek_baslik', 'ek_metin', 'ek_yeni_sayfa', 'toplam_goster'].forEach(function (k) { o[k] = E[k]; });
+    ['musteri_id', 'firma', 'kisiler', 'hitap', 'tarih', 'gonderen_id', 'gonderen_ad', 'gonderen_email', 'gonderen_tel', 'durum', 'kalemler', 'kosullar', 'gorseller', 'ek_baslik', 'ek_metin', 'ek_yeni_sayfa', 'toplam_goster', 'kase'].forEach(function (k) { o[k] = E[k]; });
     if (!o.hitap) o.hitap = autoHitap(E);
     return o;
   }
@@ -1083,6 +1088,10 @@
       fld('Web', '<input id="s-web" data-bind="web" value="' + esc(S.web) + '">') +
       fld('Adres', '<textarea id="s-adres" data-bind="adres" data-auto rows="2">' + esc(S.adres) + '</textarea>') +
       '</div></section>' +
+      '<section class="panel"><div class="panel-h"><div><h2>Kaşe ve imza</h2><p>Teklif ekranında “PDF’in altına kaşe ve imza ekle” işaretlendiğinde PDF’in en altına basılır. Beyaz kâğıt üzerinde taranmış ya da fotoğrafı çekilmiş JPG/PNG yükleyin; beyaz arka plan otomatik şeffaf yapılır.</p></div></div>' +
+      '<div class="kase-ay"><div class="kase-on"><img id="kase-img" src="' + esc(S.kase_url || B.settings.kase_url || '') + '" alt="Kaşe ve imza"></div><div class="stack" style="gap:8px">' +
+      '<label class="btn sm" for="s-kase-yukle" style="cursor:pointer"><input id="s-kase-yukle" type="file" accept="image/jpeg,image/png" hidden>Yeni görsel yükle</label>' +
+      (S.kase_ozel || B.settings.kase_ozel ? '<button class="btn sm ghost" type="button" data-act="kase-sil">Varsayılana dön</button>' : '') + '</div></div></section>' +
       '<section class="panel"><h2 style="margin-bottom:14px">Teklif formu metinleri</h2><div class="form">' +
       fld('Form başlığı', '<input id="s-baslik" data-bind="teklif_baslik" value="' + esc(S.teklif_baslik) + '">') +
       fld('Teklif no öneki', '<input id="s-onek" data-bind="teklif_onek" value="' + esc(S.teklif_onek) + '">') +
@@ -1675,6 +1684,7 @@
       case 'cal': var d = new Date(st.cal[0], st.cal[1] + (+a.dataset.d), 1); st.cal = [d.getFullYear(), d.getMonth()]; render(); break;
       case 'musteri-new': musteriModal(); break;
       case 'musteri-edit': musteriModal(byId('musteri', id)); break;
+      case 'kase-sil': api('kase', 'DELETE').then(function (j) { kaseGuncelle(j); toast('Varsayılan kaşe kullanılacak'); }).catch(fail); break;
       case 'proje-new': projeModal(); break;
       case 'proje-edit': projeModal(byId('proje', id)); break;
       case 'proje-adv':
@@ -1846,6 +1856,13 @@
         if (h.teslim) kk2.teslim = h.teslim;
         st.dirty = true; rerenderEditorKeepFocus('k' + ki + '-m');
       }
+      return;
+    }
+    if (el.id === 's-kase-yukle' && el.files && el.files.length) {
+      var kfd = new FormData(); kfd.append('dosya', el.files[0]);
+      fetch(C.api + 'kase', { method: 'POST', credentials: 'same-origin', headers: { 'X-WP-Nonce': C.nonce }, body: kfd })
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.message || 'Görsel yüklenemedi.'); return j; }); })
+        .then(function (j) { kaseGuncelle(j); toast('Kaşe ve imza görseli güncellendi'); }).catch(fail);
       return;
     }
     if (el.id === 'e-gorsel-yukle' && el.files && el.files.length) {

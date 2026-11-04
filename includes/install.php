@@ -132,6 +132,7 @@ function rego_panel_install_tables() {
 		gorseller longtext NULL,
 		ek_yeni_sayfa tinyint(1) NOT NULL DEFAULT 0,
 		toplam_goster tinyint(1) NOT NULL DEFAULT 0,
+		kase tinyint(1) NOT NULL DEFAULT 0,
 		created_at datetime NOT NULL,
 		updated_at datetime NOT NULL,
 		PRIMARY KEY  (id),

@@ -10,9 +10,9 @@ $f   = REGO_PANEL_DIR . 'pdf/fonts/';
 $dash = function ( $v ) { return '' !== trim( (string) $v ) ? esc_html( $v ) : '-'; };
 $year = gmdate( 'Y', strtotime( $t['tarih'] ) );
 
-$footer = function () use ( $s, $year ) {
+$footer = function () use ( $s, $year, $t ) {
 	?>
-	<table class="foot"><tr>
+	<table class="foot<?php echo empty( $t['kase'] ) ? '' : ' kv'; ?>"><tr>
 		<td class="fb">
 			<div class="fbh"><?php echo esc_html( $s['firma_unvan'] ); ?> / Fatura Bilgileri</div>
 			<div class="fbl"><b>V.N:</b><?php echo esc_html( $s['vergi_no'] ); ?></div>
@@ -21,6 +21,9 @@ $footer = function () use ( $s, $year ) {
 			<div class="fbl"><b>w:</b> <?php echo esc_html( $s['web'] ); ?></div>
 			<div class="fbl"><b>A:</b> <?php echo nl2br( esc_html( $s['adres'] ) ); ?></div>
 		</td>
+		<?php if ( ! empty( $t['kase'] ) ) : ?>
+		<td class="ksw"><div class="ksh">Kaşe / İmza</div><img class="ks" src="<?php echo esc_attr( rego_kase_yolu( $s ) ); ?>"></td>
+		<?php endif; ?>
 		<td class="tyw">
 			<div class="ty">
 				<div class="tyh">Sipariş Teyidi</div>
@@ -93,6 +96,10 @@ table.foot td{vertical-align:bottom;padding:0}
 .fbl{font-size:6.6pt;color:#555;line-height:1.55}
 .fbl b{color:#555}
 .tyw{width:215pt}
+.kv .fbh{font-size:9.6pt}
+.ksw{width:122pt;text-align:center;padding:0 10pt 4pt 0 !important}
+.ksh{font-family:'Mont';font-weight:bold;font-size:7pt;color:#1a4fb5;margin-bottom:2pt}
+.ks{width:118pt;height:auto}
 .ty{border:3pt solid #e2e2e2;border-radius:7pt;padding:14pt 18pt 6pt 18pt}
 .tyh{font-weight:bold;font-size:7.6pt;text-align:center;padding-right:40pt}
 .tyd{font-size:7.6pt;text-align:center;margin-top:5pt;padding-right:40pt}

@@ -213,6 +213,7 @@ function rego_row( $type, $r ) {
 		}
 		$r['ek_yeni_sayfa'] = (int) $r['ek_yeni_sayfa'];
 		$r['toplam_goster'] = (int) $r['toplam_goster'];
+		$r['kase']          = (int) ( $r['kase'] ?? 0 );
 		$r['toplamlar']     = rego_teklif_toplam( $r['kalemler'] );
 	}
 	if ( 'kargo' === $type ) {
@@ -255,4 +256,20 @@ function rego_kdv_notu( $s = null ) {
 		$not = preg_replace( "/KDV oranı\\s*%?\\s*\\d*\\s*['’]?\\s*dir\\.?/u", "KDV oranı {oran}'dir.", $not );
 	}
 	return str_replace( '{oran}', $oran, $not );
+}
+
+/** Uploaded stamp file (relative to uploads) if it exists, else ''. */
+function rego_kase_ozel( $s = null ) {
+	$s   = $s ? $s : rego_settings();
+	$rel = (string) ( $s['kase_dosya'] ?? '' );
+	return ( '' !== $rel && file_exists( trailingslashit( wp_upload_dir()['basedir'] ) . $rel ) ) ? $rel : '';
+}
+/** Absolute path of the stamp image for the PDF. */
+function rego_kase_yolu( $s = null ) {
+	$rel = rego_kase_ozel( $s );
+	return $rel ? trailingslashit( wp_upload_dir()['basedir'] ) . $rel : REGO_PANEL_DIR . 'assets/kase.png';
+}
+function rego_kase_url( $s = null ) {
+	$rel = rego_kase_ozel( $s );
+	return $rel ? trailingslashit( wp_upload_dir()['baseurl'] ) . $rel : REGO_PANEL_URL . 'assets/kase.png';
 }
