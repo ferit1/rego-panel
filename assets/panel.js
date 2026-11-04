@@ -170,6 +170,68 @@
       '<div id="layer"></div>';
   }
 
+  function projeTasi(p, asama) {
+    if (!p || p.asama === asama) return;
+    var eski = p.asama, ad = (STAGES.find(function (s) { return s[0] === asama; }) || [])[1];
+    p.asama = asama; render(); // move at once, undo if the server refuses
+    api('proje/' + p.id, 'PUT', { asama: asama }).then(function (r) { hatSync(r); upsert('proje', r.item); render(); toast(p.kod + ' → ' + ad); })
+      .catch(function (er) { p.asama = eski; render(); fail(er); });
+  }
+
+  /* Trello-style drag of project cards between stages (mouse: drag; touch: press and hold). */
+  function boardDrag() {
+    var d = null;
+    function colAt(x, y) { var el = document.elementFromPoint(x, y); return el && el.closest ? el.closest('.board .col[data-stage]') : null; }
+    function begin() {
+      var r = d.card.getBoundingClientRect();
+      d.dx = d.x0 - r.left; d.dy = d.y0 - r.top;
+      d.ghost = d.card.cloneNode(true); d.ghost.className = 'card drag-ghost'; d.ghost.style.width = r.width + 'px';
+      document.body.appendChild(d.ghost); d.card.classList.add('drag-src'); document.body.classList.add('dragging'); d.on = true;
+      if (navigator.vibrate && d.touch) try { navigator.vibrate(15); } catch (e) {}
+    }
+    function move(x, y) {
+      d.ghost.style.transform = 'translate(' + (x - d.dx) + 'px,' + (y - d.dy) + 'px) rotate(2deg)';
+      var c = colAt(x, y);
+      if (c !== d.over) { if (d.over) d.over.classList.remove('drop'); d.over = c; if (c) c.classList.add('drop'); }
+      var b = $('.board'); if (b) { var br = b.getBoundingClientRect(); if (x > br.right - 40) b.scrollLeft += 12; else if (x < br.left + 40) b.scrollLeft -= 12; }
+    }
+    function end(ok) {
+      if (!d) return;
+      clearTimeout(d.timer);
+      if (d.on) {
+        d.ghost.remove(); d.card.classList.remove('drag-src'); document.body.classList.remove('dragging');
+        if (d.over) d.over.classList.remove('drop');
+        if (ok && d.over) projeTasi(byId('proje', d.card.getAttribute('data-pid')), d.over.getAttribute('data-stage'));
+        d.justDragged = true; var dd = d; setTimeout(function () { dd.justDragged = false; }, 0);
+        st.dragClickBlock = Date.now();
+      }
+      d = null;
+    }
+    document.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      var card = e.target.closest && e.target.closest('.board .card[data-pid]');
+      if (!card || e.target.closest('button,a,input,select,textarea')) return;
+      d = { card: card, x0: e.clientX, y0: e.clientY, touch: e.pointerType !== 'mouse', id: e.pointerId };
+      if (d.touch) d.timer = setTimeout(function () { if (d && !d.on) { begin(); move(d.x0, d.y0); } }, 350);
+    });
+    document.addEventListener('pointermove', function (e) {
+      if (!d || e.pointerId !== d.id) return;
+      var far = Math.abs(e.clientX - d.x0) + Math.abs(e.clientY - d.y0) > 6;
+      if (!d.on) {
+        if (!far) return;
+        if (d.touch) { end(false); return; } // finger moved before the hold: it is a scroll
+        begin();
+      }
+      e.preventDefault(); move(e.clientX, e.clientY);
+    });
+    document.addEventListener('touchmove', function (e) { if (d && d.on) e.preventDefault(); }, { passive: false });
+    document.addEventListener('pointerup', function (e) { if (d && e.pointerId === d.id) end(true); });
+    document.addEventListener('pointercancel', function () { end(false); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && d && d.on) end(false); });
+    document.addEventListener('contextmenu', function (e) { if (d && d.touch) e.preventDefault(); });
+    document.addEventListener('click', function (e) { if (st.dragClickBlock && Date.now() - st.dragClickBlock < 300) { e.stopPropagation(); e.preventDefault(); } }, true);
+  }
+
   function render() {
     closeMenu();
     var v = VIEWS[st.view] ? st.view : 'dash';
@@ -462,15 +524,15 @@
     var P = list('proje').filter(function (p) { return match([p.kod, p.ad, p.hizmet, firma(p.musteri_id)].join(' ')); });
     var pct = { bekle: 4, onay: 12, tarama: 45, model: 75, teslim: 100 };
     var ed = can('rego_proje_edit');
-    return '<div class="head"><div><h1>Projeler</h1><p class="sub">' + (ed ? 'Bir işi sonraki aşamaya taşımak için “İlerlet”e basın.' : 'Projelerin aşamaları') + '</p></div>' +
+    return '<div class="head"><div><h1>Projeler</h1><p class="sub">' + (ed ? 'Kartı sürükleyip istediğiniz aşamaya bırakın ya da “İlerlet”e basın.' : 'Projelerin aşamaları') + '</p></div>' +
       (ed ? '<button class="btn primary" type="button" data-act="proje-new">+ Proje aç</button>' : '') + '</div>' +
       '<section class="board">' + STAGES.map(function (s) {
         var items = P.filter(function (p) { return p.asama === s[0]; });
         if (s[0] === 'teslim') items = items.slice(0, 12);
-        return '<div class="col"><div class="col-h">' + s[1] + '<span>' + P.filter(function (p) { return p.asama === s[0]; }).length + '</span></div>' +
+        return '<div class="col" data-stage="' + s[0] + '"><div class="col-h">' + s[1] + '<span>' + P.filter(function (p) { return p.asama === s[0]; }).length + '</span></div>' +
           (items.map(function (p) {
             var t = p.teklif_id ? byId('teklif', p.teklif_id) : null;
-            return '<article class="card"><div class="row" style="justify-content:space-between"><span class="mono muted">' + esc(p.kod) + '</span><span class="svc">' + esc(p.hizmet) + '</span></div>' +
+            return '<article class="card"' + (ed ? ' data-pid="' + p.id + '" title="Başka aşamaya taşımak için sürükleyin"' : '') + '><div class="row" style="justify-content:space-between"><span class="mono muted">' + esc(p.kod) + '</span><span class="svc">' + esc(p.hizmet) + '</span></div>' +
               '<div class="t">' + esc(p.ad) + '</div><div class="m">' + esc(firma(p.musteri_id)) + (p.notlar ? ' · ' + esc(p.notlar) : '') + (t ? ' · <a href="#teklif/' + t.id + '">' + esc(t.no) + '</a>' : '') + '</div>' +
               '<div class="prog"><i style="width:' + pct[p.asama] + '%"></i></div>' +
               '<div class="f"><span class="m num">Teslim ' + fmtD(p.teslim) + '</span><span class="row">' +
@@ -1617,8 +1679,7 @@
       case 'proje-edit': projeModal(byId('proje', id)); break;
       case 'proje-adv':
         var p = byId('proje', id); var si = STAGES.findIndex(function (s) { return s[0] === p.asama; });
-        var next = STAGES[Math.min(si + 1, 3)];
-        api('proje/' + id, 'PUT', { asama: next[0] }).then(function (r) { hatSync(r); upsert('proje', r.item); render(); toast(p.kod + ' → ' + next[1]); }).catch(fail);
+        projeTasi(p, STAGES[Math.min(si + 1, STAGES.length - 1)][0]);
         break;
       case 'saha-new': sahaModal(); break;
       case 'saha-edit': sahaModal(byId('saha', id)); break;
@@ -1840,6 +1901,7 @@
       document.addEventListener('visibilitychange', function () { if (!document.hidden) bilPoll(); });
       setInterval(function () { nonceYenile(); }, 6 * 3600 * 1000); // keep keys fresh in long-open tabs
       document.addEventListener('click', onClick);
+      boardDrag();
       document.addEventListener('input', onInput);
       document.addEventListener('change', onChange);
       document.addEventListener('keydown', function (e) {
