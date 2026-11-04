@@ -237,7 +237,7 @@ function rego_panel_default_settings() {
 		),
 		'kargo_firmalari' => array( 'Yurtiçi Kargo', 'Aras Kargo', 'MNG Kargo', 'PTT Kargo', 'Sürat Kargo', 'DHL', 'UPS', 'Kurye', 'Elden' ),
 		'birimler'       => array( 'Adet', 'Gün', 'Saat' ),
-		'hizmetler'      => array( '3D Tarama', 'Tersine Mühendislik', 'Kalite Kontrol', 'CNC İşleme', 'Cihaz / Yazılım Satışı', 'Eğitim' ),
+		'hizmetler'      => array( '3D Tarama', 'Tersine Mühendislik', 'Kalite Kontrol', 'CNC İşleme', '3D Baskı', 'Cihaz / Yazılım Satışı', 'Eğitim' ),
 		'sablonlar'      => array(
 			rego_sablon_kalite_kontrol(),
 			array(
@@ -312,6 +312,7 @@ function rego_panel_activate() {
 	rego_panel_migrate_v9();
 	rego_panel_migrate_v10();
 	rego_panel_migrate_v11();
+	rego_panel_migrate_v12();
 	update_option( 'rego_panel_db_version', REGO_PANEL_DB_VERSION );
 }
 
@@ -435,4 +436,20 @@ function rego_panel_migrate_v11() {
 	if ( $changed ) {
 		update_option( 'rego_panel_settings', $s, false );
 	}
+}
+
+/** Add "3D Baskı" to the service types (after CNC İşleme). */
+function rego_panel_migrate_v12() {
+	$s = get_option( 'rego_panel_settings' );
+	if ( ! is_array( $s ) || empty( $s['hizmetler'] ) || ! is_array( $s['hizmetler'] ) ) {
+		return;
+	}
+	foreach ( $s['hizmetler'] as $h ) {
+		if ( false !== mb_stripos( $h, 'baskı' ) || false !== stripos( $h, '3d print' ) ) {
+			return;
+		}
+	}
+	$i = array_search( 'CNC İşleme', $s['hizmetler'], true );
+	array_splice( $s['hizmetler'], false === $i ? count( $s['hizmetler'] ) : $i + 1, 0, array( '3D Baskı' ) );
+	update_option( 'rego_panel_settings', $s );
 }
