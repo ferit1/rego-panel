@@ -1091,6 +1091,7 @@
       '<section class="panel"><div class="panel-h"><div><h2>Kaşe ve imza</h2><p>Teklif ekranında “PDF’in altına kaşe ve imza ekle” işaretlendiğinde PDF’in en altına basılır. Beyaz kâğıt üzerinde taranmış ya da fotoğrafı çekilmiş JPG/PNG yükleyin; beyaz arka plan otomatik şeffaf yapılır.</p></div></div>' +
       '<div class="kase-ay"><div class="kase-on"><img id="kase-img" src="' + esc(S.kase_url || B.settings.kase_url || '') + '" alt="Kaşe ve imza"></div><div class="stack" style="gap:8px">' +
       '<label class="btn sm" for="s-kase-yukle" style="cursor:pointer"><input id="s-kase-yukle" type="file" accept="image/jpeg,image/png" hidden>Yeni görsel yükle</label>' +
+      '<button class="btn sm ghost" type="button" data-act="kase-dondur">Döndür ↻</button>' +
       (S.kase_ozel || B.settings.kase_ozel ? '<button class="btn sm ghost" type="button" data-act="kase-sil">Varsayılana dön</button>' : '') + '</div></div></section>' +
       '<section class="panel"><h2 style="margin-bottom:14px">Teklif formu metinleri</h2><div class="form">' +
       fld('Form başlığı', '<input id="s-baslik" data-bind="teklif_baslik" value="' + esc(S.teklif_baslik) + '">') +
@@ -1684,6 +1685,7 @@
       case 'cal': var d = new Date(st.cal[0], st.cal[1] + (+a.dataset.d), 1); st.cal = [d.getFullYear(), d.getMonth()]; render(); break;
       case 'musteri-new': musteriModal(); break;
       case 'musteri-edit': musteriModal(byId('musteri', id)); break;
+      case 'kase-dondur': a.disabled = true; api('kase/dondur', 'POST', {}).then(function (j) { kaseGuncelle(j); }).catch(function (er) { a.disabled = false; fail(er); }); break;
       case 'kase-sil': api('kase', 'DELETE').then(function (j) { kaseGuncelle(j); toast('Varsayılan kaşe kullanılacak'); }).catch(fail); break;
       case 'proje-new': projeModal(); break;
       case 'proje-edit': projeModal(byId('proje', id)); break;

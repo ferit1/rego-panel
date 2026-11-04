@@ -315,6 +315,9 @@ function rego_panel_register_routes() {
 		array( 'methods' => 'POST', 'callback' => 'rego_api_kase_yukle', 'permission_callback' => function () { return current_user_can( 'rego_ayarlar' ); } ),
 		array( 'methods' => 'DELETE', 'callback' => 'rego_api_kase_sil', 'permission_callback' => function () { return current_user_can( 'rego_ayarlar' ); } ),
 	) );
+	register_rest_route( $ns, '/kase/dondur', array(
+		'methods' => 'POST', 'callback' => 'rego_api_kase_dondur', 'permission_callback' => function () { return current_user_can( 'rego_ayarlar' ); },
+	) );
 	register_rest_route( $ns, '/gorsel', array(
 		'methods' => 'POST', 'callback' => 'rego_api_gorsel',
 		'permission_callback' => function () { return current_user_can( 'rego_teklif' ); },
@@ -1002,6 +1005,15 @@ function rego_api_kase_yukle( WP_REST_Request $req ) {
 	if ( ! $im ) {
 		return new WP_Error( 'rego_kase', 'Görsel okunamadı. JPG ya da PNG yükleyin.', array( 'status' => 400 ) );
 	}
+	// Phone photos often carry their rotation only in EXIF.
+	if ( function_exists( 'exif_read_data' ) ) {
+		$ex = @exif_read_data( $files['dosya']['tmp_name'] );
+		$or = is_array( $ex ) ? (int) ( $ex['Orientation'] ?? 1 ) : 1;
+		$deg = array( 3 => 180, 6 => -90, 8 => 90 );
+		if ( isset( $deg[ $or ] ) ) {
+			$im = imagerotate( $im, $deg[ $or ], 0 );
+		}
+	}
 	$out = rego_kase_isle( $im );
 	if ( is_wp_error( $out ) ) {
 		return $out;
@@ -1157,4 +1169,34 @@ function rego_kase_isle( $im ) {
 	imagedestroy( $src );
 	imagedestroy( $bg );
 	return $out;
+}
+
+/** Rotates the uploaded stamp 90° clockwise (photos taken sideways). */
+function rego_api_kase_dondur() {
+	$s   = rego_settings();
+	$rel = rego_kase_ozel( $s );
+	$up  = wp_upload_dir();
+	$src = $rel ? trailingslashit( $up['basedir'] ) . $rel : REGO_PANEL_DIR . 'assets/kase.png';
+	$im  = @imagecreatefrompng( $src );
+	if ( ! $im ) {
+		return new WP_Error( 'rego_kase', 'Kaşe görseli açılamadı.', array( 'status' => 500 ) );
+	}
+	imagealphablending( $im, false );
+	imagesavealpha( $im, true );
+	$r = imagerotate( $im, -90, imagecolorallocatealpha( $im, 255, 255, 255, 127 ) );
+	imagedestroy( $im );
+	imagealphablending( $r, false );
+	imagesavealpha( $r, true );
+	wp_mkdir_p( trailingslashit( $up['basedir'] ) . 'rego-panel/kase' );
+	$yeni = 'rego-panel/kase/kase-' . strtolower( wp_generate_password( 8, false ) ) . '.png';
+	if ( ! imagepng( $r, trailingslashit( $up['basedir'] ) . $yeni ) ) {
+		return new WP_Error( 'rego_kase', 'Görsel kaydedilemedi.', array( 'status' => 500 ) );
+	}
+	imagedestroy( $r );
+	if ( $rel ) {
+		wp_delete_file( trailingslashit( $up['basedir'] ) . $rel );
+	}
+	$s['kase_dosya'] = $yeni;
+	update_option( 'rego_panel_settings', $s );
+	return array( 'kase_url' => rego_kase_url( $s ), 'kase_ozel' => true );
 }
