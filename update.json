@@ -1,6 +1,6 @@
 {
-  "version": "1.7.6",
-  "package": "https://github.com/ferit1/rego-panel/archive/ac456a8d5e1d625f4b7abfcb886d7f5a1bc0d602.zip",
-  "date": "2026-11-02",
-  "notes": "Kaydedilmemiş değişiklikler uyarısı artık yalnızca gerçekten değiştirilip kaydedilmemiş bir değer varken çıkar. Tarayıcının WhatsApp alanlarına giriş bilgilerini (admin/şifre) doldurması engellendi; yanlışlıkla kaydedilmiş değerler temizlenir."
+  "version": "1.7.7",
+  "package": "https://github.com/ferit1/rego-panel/archive/74f8b71d98543ede1c19a1fba7e43ee2bc1f3d22.zip",
+  "date": "2026-11-04",
+  "notes": "Hizmet türlerine \"3D Baskı\" eklendi (projelerde Hizmet listesinde çıkar)."
 }
