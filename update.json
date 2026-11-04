@@ -1,6 +1,6 @@
 {
-  "version": "1.7.8",
-  "package": "https://github.com/ferit1/rego-panel/archive/71357591bfbd7333090fd4c54d489f5d19cdfe64.zip",
+  "version": "1.7.9",
+  "package": "https://github.com/ferit1/rego-panel/archive/17fca658017f9a56efc96275a7dfa4a0279f24f6.zip",
   "date": "2026-11-04",
-  "notes": "Projelere \"Onay bekliyor\" aşaması eklendi (Onaylandı'dan önce). Hizmet türlerinde 3D Baskı var."
+  "notes": "Projeler panosunda kartlar Trello gibi sürüklenip istenen aşamaya bırakılabilir (telefonda basılı tutup sürükleyin). Modelleme aşamasındaki \"İlerlet\" artık Teslim edildi'ye geçirir."
 }
