@@ -1,6 +1,6 @@
 {
-  "version": "1.7.9",
-  "package": "https://github.com/ferit1/rego-panel/archive/17fca658017f9a56efc96275a7dfa4a0279f24f6.zip",
+  "version": "1.8.0",
+  "package": "https://github.com/ferit1/rego-panel/archive/b1c8ca7bbe1be5aaddeb843bff716668193c8874.zip",
   "date": "2026-11-04",
-  "notes": "Projeler panosunda kartlar Trello gibi sürüklenip istenen aşamaya bırakılabilir (telefonda basılı tutup sürükleyin). Modelleme aşamasındaki \"İlerlet\" artık Teslim edildi'ye geçirir."
+  "notes": "Teklif ekranına \"PDF'in altına kaşe ve imza ekle\" seçeneği geldi; işaretlenen tekliflerde kaşe/imza PDF'in en altına basılır. Kaşe görseli Ayarlar → Kaşe ve imza bölümünden değiştirilebilir."
 }
