@@ -22,10 +22,7 @@ $teyit = function () use ( $s, $year ) {
 $footer = function () use ( $s, $t, $teyit ) {
 	?>
 	<?php $kase = ! empty( $t['kase'] ); ?>
-	<table class="foot"><?php if ( $kase ) : ?><tr>
-		<td class="ksw"><div class="ksh">Kaşe / İmza</div><img class="ks" src="<?php echo esc_attr( rego_kase_yolu( $s ) ); ?>"></td>
-		<td class="tyw" rowspan="2"><?php $teyit(); ?></td>
-	</tr><?php endif; ?><tr>
+	<table class="foot<?php echo $kase ? ' kv' : ''; ?>"><tr>
 		<td class="fb">
 			<div class="fbh"><?php echo esc_html( $s['firma_unvan'] ); ?> / Fatura Bilgileri</div>
 			<div class="fbl"><b>V.N:</b><?php echo esc_html( $s['vergi_no'] ); ?></div>
@@ -34,7 +31,10 @@ $footer = function () use ( $s, $t, $teyit ) {
 			<div class="fbl"><b>w:</b> <?php echo esc_html( $s['web'] ); ?></div>
 			<div class="fbl"><b>A:</b> <?php echo nl2br( esc_html( $s['adres'] ) ); ?></div>
 		</td>
-		<?php if ( ! $kase ) : ?><td class="tyw"><?php $teyit(); ?></td><?php endif; ?>
+		<?php if ( $kase ) : ?>
+		<td class="ksw"><div class="ksh">Kaşe / İmza</div><img class="ks" src="<?php echo esc_attr( rego_kase_yolu( $s ) ); ?>"></td>
+		<?php endif; ?>
+		<td class="tyw"><?php $teyit(); ?></td>
 	</tr></table>
 	<?php
 };
@@ -100,9 +100,10 @@ table.foot td{vertical-align:bottom;padding:0}
 .fbl{font-size:6.6pt;color:#555;line-height:1.55}
 .fbl b{color:#555}
 .tyw{width:215pt}
-.ksw{text-align:left;padding:0 0 6pt 0 !important;vertical-align:bottom}
+.kv .fb{width:202pt}
+.ksw{width:104pt;text-align:center;padding:0 6pt 14pt 0 !important;vertical-align:bottom}
 .ksh{font-family:'Mont';font-weight:bold;font-size:7pt;color:#1a4fb5;margin-bottom:2pt}
-.ks{width:150pt;height:auto}
+.ks{width:94pt;height:auto}
 .ty{border:3pt solid #e2e2e2;border-radius:7pt;padding:14pt 18pt 6pt 18pt}
 .tyh{font-weight:bold;font-size:7.6pt;text-align:center;padding-right:40pt}
 .tyd{font-size:7.6pt;text-align:center;margin-top:5pt;padding-right:40pt}
