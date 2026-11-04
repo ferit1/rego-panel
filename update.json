@@ -1,6 +1,6 @@
 {
-  "version": "1.8.0",
-  "package": "https://github.com/ferit1/rego-panel/archive/b1c8ca7bbe1be5aaddeb843bff716668193c8874.zip",
+  "version": "1.8.1",
+  "package": "https://github.com/ferit1/rego-panel/archive/94cb529c8650f5682f4a703a25c0ae39c9763726.zip",
   "date": "2026-11-04",
-  "notes": "Teklif ekranına \"PDF'in altına kaşe ve imza ekle\" seçeneği geldi; işaretlenen tekliflerde kaşe/imza PDF'in en altına basılır. Kaşe görseli Ayarlar → Kaşe ve imza bölümünden değiştirilebilir."
+  "notes": "Kaşe görseli yenilendi (net, şeffaf). Kaşe eklenince fatura bilgileri/adres artık kaymaz; kaşe fatura bilgilerinin üstüne basılır. Yüklenen kaşe fotoğrafları otomatik kırpılır ve arka planı temizlenir."
 }
