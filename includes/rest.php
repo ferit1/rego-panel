@@ -127,7 +127,7 @@ function rego_clean_tekrar( $v ) {
 	return in_array( $v, array( 'aylik', 'yillik' ), true ) ? $v : 'yok';
 }
 function rego_clean_asama( $v ) {
-	return in_array( $v, array( 'onay', 'tarama', 'model', 'teslim' ), true ) ? $v : 'onay';
+	return in_array( $v, array( 'bekle', 'onay', 'tarama', 'model', 'teslim' ), true ) ? $v : 'onay';
 }
 function rego_clean_durum( $v ) {
 	return in_array( $v, array( 'taslak', 'gonderildi', 'onaylandi', 'reddedildi', 'faturalandi' ), true ) ? $v : 'taslak';

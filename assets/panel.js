@@ -7,7 +7,7 @@
   var AY = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
   var AYU = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
   var PARA = ['₺', '$', '€', '£'];
-  var STAGES = [['onay', 'Onaylandı'], ['tarama', 'Taramada'], ['model', 'Modelleme / Rapor'], ['teslim', 'Teslim edildi']];
+  var STAGES = [['bekle', 'Onay bekliyor'], ['onay', 'Onaylandı'], ['tarama', 'Taramada'], ['model', 'Modelleme / Rapor'], ['teslim', 'Teslim edildi']];
   var DURUM = { taslak: ['mute', 'Taslak'], gonderildi: ['warn', 'Yanıt bekliyor'], onaylandi: ['ok', 'Onaylandı'], reddedildi: ['bad', 'Reddedildi'], faturalandi: ['info', 'Faturalandı'] };
   var ROLES = { rego_yonetici: 'Yönetici', rego_satis: 'Satış', rego_saha: 'Saha ekibi', administrator: 'Site yöneticisi', pasif: 'Pasif' };
   var KOS_BASLIK = ['Ödeme Şartları', 'Teslim Süresi', 'Dataların Teslimi', 'Önemli Notlar', 'Garanti', 'Geçerlilik Süresi'];
@@ -206,7 +206,7 @@
       '<div class="m" style="text-align:right"><span class="mono">' + esc(s.saat || '') + '</span><br>' + esc(s.ekip || '') + '</div>' +
       (can('rego_saha_edit') ? '' : '') + '</div>';
   }
-  function stageChip(s) { return { onay: chip('mute', 'Onaylandı'), tarama: chip('info', 'Taramada'), model: chip('warn', 'Modelleme'), teslim: chip('ok', 'Teslim edildi') }[s] || ''; }
+  function stageChip(s) { return { bekle: chip('warn', 'Onay bekliyor'), onay: chip('mute', 'Onaylandı'), tarama: chip('info', 'Taramada'), model: chip('warn', 'Modelleme'), teslim: chip('ok', 'Teslim edildi') }[s] || ''; }
   function durumChip(d) { var x = DURUM[d] || DURUM.taslak; return chip(x[0], x[1]); }
   function invState(f) { if (f.odendi) return chip('ok', 'Ödendi'); return f.vade && f.vade < today() ? chip('bad', 'Gecikmiş') : chip('warn', 'Bekliyor'); }
   function teklifTop(t) { return sumTxt(t.toplamlar || {}); }
@@ -460,7 +460,7 @@
 
   VIEWS.proje = function () {
     var P = list('proje').filter(function (p) { return match([p.kod, p.ad, p.hizmet, firma(p.musteri_id)].join(' ')); });
-    var pct = { onay: 12, tarama: 45, model: 75, teslim: 100 };
+    var pct = { bekle: 4, onay: 12, tarama: 45, model: 75, teslim: 100 };
     var ed = can('rego_proje_edit');
     return '<div class="head"><div><h1>Projeler</h1><p class="sub">' + (ed ? 'Bir işi sonraki aşamaya taşımak için “İlerlet”e basın.' : 'Projelerin aşamaları') + '</p></div>' +
       (ed ? '<button class="btn primary" type="button" data-act="proje-new">+ Proje aç</button>' : '') + '</div>' +

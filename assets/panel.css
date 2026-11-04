@@ -171,7 +171,7 @@ table.t tr.click:hover td{background:var(--surface-2)}
 .calpop-i.done b{text-decoration:line-through;text-decoration-color:var(--muted);color:var(--muted)}
 
 /* ---------- kanban ---------- */
-.board{display:grid;grid-template-columns:repeat(4,minmax(230px,1fr));gap:14px;overflow-x:auto;padding-bottom:4px}
+.board{display:grid;grid-template-columns:repeat(5,minmax(210px,1fr));gap:14px;overflow-x:auto;padding-bottom:4px}
 .col{background:var(--surface-2);border-radius:var(--r);padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
 .col-h{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:13px}
 .col-h span{color:var(--muted);font-weight:600}
