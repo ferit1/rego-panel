@@ -1,6 +1,6 @@
 {
-  "version": "1.8.2",
-  "package": "https://github.com/ferit1/rego-panel/archive/1968c8d50ff8acc3284175e62ee6d57d0f3812d1.zip",
+  "version": "1.8.3",
+  "package": "https://github.com/ferit1/rego-panel/archive/e062e89fd2e1b7ab79ab1c9ca3cd9fe9f832012b.zip",
   "date": "2026-11-04",
-  "notes": "Kaşe küçültüldü ve fatura bilgileri ile Sipariş Teyidi kutusunun arasına alındı; kaşe eklenince alt bölüm aşağı inmez, adres kaymaz."
+  "notes": "Kaşe görseli imzalı haliyle değiştirildi. Ayarlar → Kaşe ve imza bölümüne \"Döndür\" butonu eklendi; yan çekilmiş fotoğraflar düzeltilebilir."
 }
