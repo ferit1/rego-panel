@@ -1002,30 +1002,9 @@ function rego_api_kase_yukle( WP_REST_Request $req ) {
 	if ( ! $im ) {
 		return new WP_Error( 'rego_kase', 'Görsel okunamadı. JPG ya da PNG yükleyin.', array( 'status' => 400 ) );
 	}
-	$w = imagesx( $im );
-	$h = imagesy( $im );
-	$k = min( 1, 900 / max( $w, $h ) );
-	$nw = max( 1, (int) round( $w * $k ) );
-	$nh = max( 1, (int) round( $h * $k ) );
-	$out = imagecreatetruecolor( $nw, $nh );
-	imagealphablending( $out, false );
-	imagesavealpha( $out, true );
-	imagefill( $out, 0, 0, imagecolorallocatealpha( $out, 255, 255, 255, 127 ) );
-	imagecopyresampled( $out, $im, 0, 0, 0, 0, $nw, $nh, $w, $h );
-	imagedestroy( $im );
-	// White paper → transparent, so the stamp sits cleanly on the page.
-	for ( $y = 0; $y < $nh; $y++ ) {
-		for ( $x = 0; $x < $nw; $x++ ) {
-			$c   = imagecolorat( $out, $x, $y );
-			$a0  = ( $c >> 24 ) & 0x7F;
-			$r   = ( $c >> 16 ) & 0xFF;
-			$g   = ( $c >> 8 ) & 0xFF;
-			$b   = $c & 0xFF;
-			$lum = ( $r + $g + $b ) / 3;
-			$op  = $lum >= 235 ? 0 : min( 1, ( 235 - $lum ) / 115 );
-			$op  = $op * ( 1 - $a0 / 127 );
-			imagesetpixel( $out, $x, $y, imagecolorallocatealpha( $out, $r, $g, $b, (int) round( 127 * ( 1 - $op ) ) ) );
-		}
+	$out = rego_kase_isle( $im );
+	if ( is_wp_error( $out ) ) {
+		return $out;
 	}
 	$up  = wp_upload_dir();
 	$dir = trailingslashit( $up['basedir'] ) . 'rego-panel/kase';
@@ -1053,4 +1032,129 @@ function rego_api_kase_sil() {
 	$s['kase_dosya'] = '';
 	update_option( 'rego_panel_settings', $s );
 	return array( 'kase_url' => rego_kase_url( $s ), 'kase_ozel' => false );
+}
+
+/**
+ * Turns a photo/scan of a stamp (and signature) into a tight, transparent PNG:
+ * paper is measured locally (photos are never evenly lit), ink is what is clearly darker or more
+ * coloured than the paper around it, and the picture is cropped to the main block of ink
+ * (card edges, shadows and specks fall away).
+ */
+function rego_kase_isle( $im ) {
+	$w  = imagesx( $im );
+	$h  = imagesy( $im );
+	$k  = min( 1, 1400 / max( $w, $h ) );
+	$nw = max( 1, (int) round( $w * $k ) );
+	$nh = max( 1, (int) round( $h * $k ) );
+	$src = imagecreatetruecolor( $nw, $nh );
+	imagefill( $src, 0, 0, imagecolorallocate( $src, 255, 255, 255 ) );
+	imagecopyresampled( $src, $im, 0, 0, 0, 0, $nw, $nh, $w, $h );
+	imagedestroy( $im );
+	// Local paper colour: shrink hard, then scale back up (a cheap large blur).
+	$bw = max( 2, (int) round( $nw / 24 ) );
+	$bh = max( 2, (int) round( $nh / 24 ) );
+	$sm = imagecreatetruecolor( $bw, $bh );
+	imagecopyresampled( $sm, $src, 0, 0, 0, 0, $bw, $bh, $nw, $nh );
+	// Ink pulls the small image darker; lift each cell to the lightest of its neighbours.
+	$cells = array();
+	for ( $y = 0; $y < $bh; $y++ ) {
+		for ( $x = 0; $x < $bw; $x++ ) {
+			$cells[ $y ][ $x ] = imagecolorat( $sm, $x, $y );
+		}
+	}
+	for ( $y = 0; $y < $bh; $y++ ) {
+		for ( $x = 0; $x < $bw; $x++ ) {
+			$best = $cells[ $y ][ $x ];
+			$bl   = -1;
+			for ( $dy = -1; $dy <= 1; $dy++ ) {
+				for ( $dx = -1; $dx <= 1; $dx++ ) {
+					if ( isset( $cells[ $y + $dy ][ $x + $dx ] ) ) {
+						$c = $cells[ $y + $dy ][ $x + $dx ];
+						$l = ( ( $c >> 16 ) & 0xFF ) + ( ( $c >> 8 ) & 0xFF ) + ( $c & 0xFF );
+						if ( $l > $bl ) { $bl = $l; $best = $c; }
+					}
+				}
+			}
+			imagesetpixel( $sm, $x, $y, $best );
+		}
+	}
+	$bg = imagecreatetruecolor( $nw, $nh );
+	imagecopyresampled( $bg, $sm, 0, 0, 0, 0, $nw, $nh, $bw, $bh );
+	imagedestroy( $sm );
+
+	$op   = array();
+	$colc = array_fill( 0, $nw, 0 );
+	for ( $y = 0; $y < $nh; $y++ ) {
+		for ( $x = 0; $x < $nw; $x++ ) {
+			$c  = imagecolorat( $src, $x, $y );
+			$p  = imagecolorat( $bg, $x, $y );
+			$r  = ( $c >> 16 ) & 0xFF; $g = ( $c >> 8 ) & 0xFF; $b = $c & 0xFF;
+			$pr = ( $p >> 16 ) & 0xFF; $pg = ( $p >> 8 ) & 0xFF; $pb = $p & 0xFF;
+			$d  = ( $pr + $pg + $pb - $r - $g - $b ) / 3;
+			$sa = ( max( $r, $g, $b ) - min( $r, $g, $b ) ) - ( max( $pr, $pg, $pb ) - min( $pr, $pg, $pb ) );
+			$o  = max( min( 1, max( 0, ( $d - 32 ) / 50 ) ), min( 1, max( 0, ( $sa - 22 ) / 40 ) ) );
+			$op[ $y * $nw + $x ] = $o;
+			if ( $o > 0.5 ) {
+				$colc[ $x ]++;
+			}
+		}
+	}
+	// Largest block of ink, column-wise first, then row-wise inside those columns.
+	$block = function ( $counts, $min, $gap ) {
+		$best = null; $cur = null; $last = -1;
+		foreach ( $counts as $i => $n ) {
+			if ( $n < $min ) {
+				continue;
+			}
+			if ( null === $cur || $i - $last > $gap ) {
+				if ( $cur && ( ! $best || $cur[2] > $best[2] ) ) { $best = $cur; }
+				$cur = array( $i, $i, 0 );
+			}
+			$cur[1] = $i; $cur[2] += $n; $last = $i;
+		}
+		if ( $cur && ( ! $best || $cur[2] > $best[2] ) ) { $best = $cur; }
+		return $best;
+	};
+	$cx = $block( $colc, 2, (int) max( 8, $nw * 0.06 ) );
+	if ( ! $cx ) {
+		imagedestroy( $src ); imagedestroy( $bg );
+		return new WP_Error( 'rego_kase', 'Görselde kaşe ya da imza bulunamadı. Beyaz kâğıt üzerinde, net bir fotoğraf yükleyin.', array( 'status' => 400 ) );
+	}
+	$rowc = array_fill( 0, $nh, 0 );
+	for ( $y = 0; $y < $nh; $y++ ) {
+		for ( $x = $cx[0]; $x <= $cx[1]; $x++ ) {
+			if ( $op[ $y * $nw + $x ] > 0.5 ) { $rowc[ $y ]++; }
+		}
+	}
+	$cy  = $block( $rowc, 2, (int) max( 8, $nh * 0.06 ) );
+	$pad = 8;
+	$x0  = max( 0, $cx[0] - $pad ); $x1 = min( $nw - 1, $cx[1] + $pad );
+	$y0  = max( 0, $cy[0] - $pad ); $y1 = min( $nh - 1, $cy[1] + $pad );
+	$cw  = $x1 - $x0 + 1;
+	$ch  = $y1 - $y0 + 1;
+	$out = imagecreatetruecolor( $cw, $ch );
+	imagealphablending( $out, false );
+	imagesavealpha( $out, true );
+	for ( $y = 0; $y < $ch; $y++ ) {
+		for ( $x = 0; $x < $cw; $x++ ) {
+			$o = $op[ ( $y + $y0 ) * $nw + $x + $x0 ];
+			if ( $o < 0.04 ) {
+				imagesetpixel( $out, $x, $y, imagecolorallocatealpha( $out, 255, 255, 255, 127 ) );
+				continue;
+			}
+			$c = imagecolorat( $src, $x + $x0, $y + $y0 );
+			$p = imagecolorat( $bg, $x + $x0, $y + $y0 );
+			$rgb = array();
+			foreach ( array( 16, 8, 0 ) as $sh ) {
+				$v = ( $c >> $sh ) & 0xFF;
+				$q = ( $p >> $sh ) & 0xFF;
+				// Remove the paper showing through faint ink so edges keep the ink colour.
+				$rgb[] = (int) max( 0, min( 255, ( $v - ( 1 - $o ) * $q ) / $o ) );
+			}
+			imagesetpixel( $out, $x, $y, imagecolorallocatealpha( $out, $rgb[0], $rgb[1], $rgb[2], (int) round( 127 * ( 1 - $o ) ) ) );
+		}
+	}
+	imagedestroy( $src );
+	imagedestroy( $bg );
+	return $out;
 }
