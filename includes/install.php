@@ -316,6 +316,9 @@ function rego_panel_activate() {
 	rego_panel_migrate_v12();
 	if ( function_exists( 'rego_blog_cta_duzelt' ) ) {
 		did_action( 'init' ) ? rego_blog_cta_duzelt() : add_action( 'init', 'rego_blog_cta_duzelt', 20 );
+		if ( version_compare( (string) get_option( 'rego_panel_db_version' ), '15', '<' ) ) {
+			did_action( 'init' ) ? rego_blog_gorsel_yenile() : add_action( 'init', 'rego_blog_gorsel_yenile', 21 );
+		}
 	}
 	update_option( 'rego_panel_db_version', REGO_PANEL_DB_VERSION );
 }

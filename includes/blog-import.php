@@ -191,3 +191,47 @@ function rego_blog_cta_duzelt() {
 	}
 	return $n;
 }
+
+/** Swaps the blog images for the re-cropped 16:9 versions and points the posts at the new sizes. */
+function rego_blog_gorsel_yenile() {
+	require_once ABSPATH . 'wp-admin/includes/image.php';
+	$atts = get_posts( array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'meta_key' => '_rego_blog_img', 'numberposts' => 50 ) );
+	$yeni = array();
+	foreach ( $atts as $a ) {
+		$k   = get_post_meta( $a->ID, '_rego_blog_img', true );
+		$src = REGO_PANEL_DIR . 'blog-import/img/' . $k . '.jpg';
+		$dst = get_attached_file( $a->ID );
+		if ( ! $k || ! file_exists( $src ) || ! $dst ) {
+			continue;
+		}
+		$eski = wp_get_attachment_metadata( $a->ID );
+		if ( ! empty( $eski['sizes'] ) ) {
+			foreach ( $eski['sizes'] as $sz ) {
+				wp_delete_file( path_join( dirname( $dst ), $sz['file'] ) );
+			}
+		}
+		if ( ! copy( $src, $dst ) ) {
+			continue;
+		}
+		wp_update_attachment_metadata( $a->ID, wp_generate_attachment_metadata( $a->ID, $dst ) );
+		$yeni[ $a->ID ] = wp_get_attachment_image_url( $a->ID, 'large' );
+	}
+	if ( ! $yeni ) {
+		return 0;
+	}
+	$n = 0;
+	foreach ( rego_blog_paketi() as $p ) {
+		$m = rego_blog_mevcut( $p['slug'] );
+		if ( ! $m ) {
+			continue;
+		}
+		$c = preg_replace_callback( '/<img src="[^"]*"([^>]*class="wp-image-(\d+)")/', function ( $mm ) use ( $yeni ) {
+			return isset( $yeni[ (int) $mm[2] ] ) ? '<img src="' . esc_url( $yeni[ (int) $mm[2] ] ) . '"' . $mm[1] : $mm[0];
+		}, $m->post_content );
+		if ( $c !== $m->post_content ) {
+			wp_update_post( array( 'ID' => $m->ID, 'post_content' => wp_slash( $c ) ) );
+			$n++;
+		}
+	}
+	return $n;
+}
