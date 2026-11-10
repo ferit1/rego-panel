@@ -1,6 +1,6 @@
 {
-  "version": "1.8.5",
-  "package": "https://github.com/ferit1/rego-panel/archive/ec2424cba93404a9e9851190b0dd3d78e9e0d3bc.zip",
+  "version": "1.8.6",
+  "package": "https://github.com/ferit1/rego-panel/archive/312803e8b05e183946de1ecd5f29dda55076e28e.zip",
   "date": "2026-11-11",
-  "notes": "Blog yazılarının sonundaki iletişim kutusu koyu lacivert zemin ve beyaz yazıyla yenilendi; daha önce eklenen taslaklar güncellemeyle otomatik düzeltilir."
+  "notes": "Blog görselleri yeniden düzenlendi: program menüleri ve boşluklar kırpıldı, hepsi 16:9 ve ortalı; kapak görsellerinde model kesilmez. Siteye eklenmiş yazılar güncellemeyle otomatik düzelir."
 }
