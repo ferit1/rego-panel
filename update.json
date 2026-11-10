@@ -1,6 +1,6 @@
 {
-  "version": "1.8.3",
-  "package": "https://github.com/ferit1/rego-panel/archive/e062e89fd2e1b7ab79ab1c9ca3cd9fe9f832012b.zip",
-  "date": "2026-11-04",
-  "notes": "Kaşe görseli imzalı haliyle değiştirildi. Ayarlar → Kaşe ve imza bölümüne \"Döndür\" butonu eklendi; yan çekilmiş fotoğraflar düzeltilebilir."
+  "version": "1.8.4",
+  "package": "https://github.com/ferit1/rego-panel/archive/e3aafacca4c2357b89801a10b9666428fcf3ad6a.zip",
+  "date": "2026-11-11",
+  "notes": "Ayarlar → Blog yazıları: Geomagic / dijital diş hekimliği tez analizi için hazırlanan 9 blog yazısı tek tıkla WordPress'e taslak olarak eklenir (görseller, iç bağlantılar, etiketler, SEO alanları)."
 }
