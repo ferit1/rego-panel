@@ -170,6 +170,23 @@
       '<div id="layer"></div>';
   }
 
+  function blogBolum() {
+    if (!st.blog) {
+      st.blog = { yukleniyor: true };
+      api('blog').then(function (j) { st.blog = j; if (st.view === 'ayarlar') render(); }).catch(function () { st.blog = { yazilar: [] }; });
+      return '';
+    }
+    var y = st.blog.yazilar || [];
+    if (!y.length) return '';
+    var eksik = y.filter(function (x) { return !x.id; }).length;
+    var dur = { draft: 'Taslak', publish: 'Yayında', pending: 'Onay bekliyor', future: 'Zamanlandı', private: 'Özel' };
+    return '<section class="panel"><div class="panel-h"><div><h2>Blog yazıları</h2><p>Dijital diş hekimliği / Geomagic tez analizi için hazırlanan ' + y.length + ' yazı. “Siteye taslak olarak ekle” deyince yazılar görselleri, iç bağlantıları, etiketleri ve SEO alanlarıyla birlikte WordPress’e <b>taslak</b> olarak eklenir; kontrol edip siz yayınlarsınız.</p></div>' +
+      (eksik ? '<button class="btn" type="button" data-act="blog-aktar">Siteye taslak olarak ekle (' + eksik + ')</button>' : '') + '</div>' +
+      '<div class="stack" style="gap:6px">' + y.map(function (x) {
+        return '<div class="row" style="justify-content:space-between;gap:12px;border-top:1px solid var(--line);padding-top:6px"><span>' + esc(x.baslik) + '</span>' +
+          (x.id ? '<span class="row" style="gap:10px"><span class="chip ' + (x.durum === 'publish' ? 'ok' : 'mute') + '">' + (dur[x.durum] || x.durum) + '</span><a href="' + esc(x.duzen) + '" target="_blank" rel="noopener">Düzenle</a></span>' : chip('mute', 'Eklenmedi')) + '</div>';
+      }).join('') + '</div></section>';
+  }
   function kaseGuncelle(j) {
     [B.settings, st.forms.S].forEach(function (o) { if (o) { o.kase_url = j.kase_url + '?v=' + Date.now(); o.kase_ozel = j.kase_ozel; } });
     if (st.view === 'ayarlar') render();
@@ -1088,6 +1105,7 @@
       fld('Web', '<input id="s-web" data-bind="web" value="' + esc(S.web) + '">') +
       fld('Adres', '<textarea id="s-adres" data-bind="adres" data-auto rows="2">' + esc(S.adres) + '</textarea>') +
       '</div></section>' +
+      blogBolum() +
       '<section class="panel"><div class="panel-h"><div><h2>Kaşe ve imza</h2><p>Teklif ekranında “PDF’in altına kaşe ve imza ekle” işaretlendiğinde PDF’in en altına basılır. Beyaz kâğıt üzerinde taranmış ya da fotoğrafı çekilmiş JPG/PNG yükleyin; beyaz arka plan otomatik şeffaf yapılır.</p></div></div>' +
       '<div class="kase-ay"><div class="kase-on"><img id="kase-img" src="' + esc(S.kase_url || B.settings.kase_url || '') + '" alt="Kaşe ve imza"></div><div class="stack" style="gap:8px">' +
       '<label class="btn sm" for="s-kase-yukle" style="cursor:pointer"><input id="s-kase-yukle" type="file" accept="image/jpeg,image/png" hidden>Yeni görsel yükle</label>' +
@@ -1685,6 +1703,9 @@
       case 'cal': var d = new Date(st.cal[0], st.cal[1] + (+a.dataset.d), 1); st.cal = [d.getFullYear(), d.getMonth()]; render(); break;
       case 'musteri-new': musteriModal(); break;
       case 'musteri-edit': musteriModal(byId('musteri', id)); break;
+      case 'blog-aktar': a.disabled = true; a.textContent = 'Ekleniyor…';
+        api('blog', 'POST', {}).then(function (j) { st.blog = { yazilar: j.yazilar }; render(); toast(j.yeni + ' yazı taslak olarak eklendi'); })
+          .catch(function (er) { a.disabled = false; a.textContent = 'Siteye taslak olarak ekle'; fail(er); }); break;
       case 'kase-dondur': a.disabled = true; api('kase/dondur', 'POST', {}).then(function (j) { kaseGuncelle(j); }).catch(function (er) { a.disabled = false; fail(er); }); break;
       case 'kase-sil': api('kase', 'DELETE').then(function (j) { kaseGuncelle(j); toast('Varsayılan kaşe kullanılacak'); }).catch(fail); break;
       case 'proje-new': projeModal(); break;
