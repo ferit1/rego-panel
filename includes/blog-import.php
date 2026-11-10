@@ -170,3 +170,24 @@ add_action( 'rest_api_init', function () {
 		array( 'methods' => 'POST', 'callback' => 'rego_blog_ice_aktar', 'permission_callback' => function () { return current_user_can( 'rego_ayarlar' ); } ),
 	) );
 } );
+
+/** Replaces the first version's light contact box (unreadable on dark themes) in imported posts. */
+function rego_blog_cta_duzelt() {
+	$yeni = @file_get_contents( REGO_PANEL_DIR . 'blog-import/cta.html' );
+	if ( ! $yeni ) {
+		return 0;
+	}
+	$n = 0;
+	foreach ( rego_blog_paketi() as $p ) {
+		$m = rego_blog_mevcut( $p['slug'] );
+		if ( ! $m || false === strpos( $m->post_content, 'background-color:#eef3fb' ) ) {
+			continue;
+		}
+		$c = preg_replace( '/<!-- wp:group \{[^\n]*#eef3fb[^\n]*-->.*?<!-- \/wp:group -->/s', $yeni, $m->post_content, 1 );
+		if ( $c && $c !== $m->post_content ) {
+			wp_update_post( array( 'ID' => $m->ID, 'post_content' => wp_slash( $c ) ) );
+			$n++;
+		}
+	}
+	return $n;
+}
