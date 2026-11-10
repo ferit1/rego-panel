@@ -1,6 +1,6 @@
 {
-  "version": "1.8.4",
-  "package": "https://github.com/ferit1/rego-panel/archive/e3aafacca4c2357b89801a10b9666428fcf3ad6a.zip",
+  "version": "1.8.5",
+  "package": "https://github.com/ferit1/rego-panel/archive/ec2424cba93404a9e9851190b0dd3d78e9e0d3bc.zip",
   "date": "2026-11-11",
-  "notes": "Ayarlar → Blog yazıları: Geomagic / dijital diş hekimliği tez analizi için hazırlanan 9 blog yazısı tek tıkla WordPress'e taslak olarak eklenir (görseller, iç bağlantılar, etiketler, SEO alanları)."
+  "notes": "Blog yazılarının sonundaki iletişim kutusu koyu lacivert zemin ve beyaz yazıyla yenilendi; daha önce eklenen taslaklar güncellemeyle otomatik düzeltilir."
 }
