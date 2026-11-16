@@ -569,12 +569,12 @@
     var all = list('teklif').filter(function (t) { return match([t.no, t.firma, t.kisi].join(' ')); });
     var rows = tab === 'tum' ? all : all.filter(function (t) { return t.durum === tab; });
     var tabs = [['tum', 'Tümü'], ['taslak', 'Taslak'], ['gonderildi', 'Yanıt bekliyor'], ['onaylandi', 'Onaylandı'], ['reddedildi', 'Reddedildi'], ['faturalandi', 'Faturalandı']];
-    return '<div class="head"><div><h1>Fiyat teklifleri</h1><p class="sub">Firma ve kalemleri girin; PDF, Rego teklif formu düzeninde hazırlanır.</p></div><button class="btn primary" type="button" data-go="teklif/yeni">+ Yeni teklif</button></div>' +
+    return '<div class="head"><div><h1>Fiyat teklifleri</h1><p class="sub">Firma ve kalemleri girin; PDF, Rego teklif formu düzeninde hazırlanır.</p></div><div class="row"><button class="btn" type="button" data-act="yeni-proforma">+ Proforma fatura</button><button class="btn primary" type="button" data-act="yeni-teklif">+ Yeni teklif</button></div></div>' +
       '<div class="tabs" role="tablist">' + tabs.map(function (x) { var n = x[0] === 'tum' ? all.length : all.filter(function (t) { return t.durum === x[0]; }).length; return '<button class="tab" role="tab" type="button" data-act="tab" data-k="teklif" data-v="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">' + x[1] + ' (' + n + ')</button>'; }).join('') + '</div>' +
       '<section class="panel"><div class="tablewrap"><table class="t"><thead><tr><th>No</th><th>Firma</th><th>İlgili kişi</th><th>Tarih</th><th>Gönderen</th><th>Durum</th><th class="r">Tutar (KDV hariç)</th><th></th></tr></thead><tbody>' +
       (rows.map(function (t) {
         var u = user(t.gonderen_id);
-        return '<tr class="click" data-go="teklif/' + t.id + '"><td class="mono">' + esc(t.no) + '</td><td class="strong">' + esc(t.firma) + '</td><td>' + esc(t.kisi || '—') + '</td><td class="num">' + fmtD(t.tarih) + '</td><td>' + esc(t.gonderen_ad || (u ? displayName(u) : '—')) + '</td><td>' + durumChip(t.durum) + '</td><td class="r num strong">' + esc(teklifTop(t)) + '</td>' +
+        return '<tr class="click" data-go="teklif/' + t.id + '"><td class="mono">' + esc(t.no) + (t.belge === 'proforma' ? ' ' + chip('info', 'Proforma') : '') + '</td><td class="strong">' + esc(t.firma) + '</td><td>' + esc(t.kisi || '—') + '</td><td class="num">' + fmtD(t.tarih) + '</td><td>' + esc(t.gonderen_ad || (u ? displayName(u) : '—')) + '</td><td>' + durumChip(t.durum) + '</td><td class="r num strong">' + esc(teklifTop(t)) + '</td>' +
           '<td class="r"><a class="btn sm" href="' + pdfUrl(t.id) + '" target="_blank" rel="noopener" data-stop="1">PDF</a></td></tr>';
       }).join('') || emptyRow(8, st.q ? 'Aramayla eşleşen teklif yok.' : 'Bu listede teklif yok.', st.q ? '' : ' “+ Yeni teklif” ile başlayın.')) +
       '</tbody></table></div></section>';
@@ -589,13 +589,14 @@
       tarih: today(), gonderen_id: B.me.id, durum: 'taslak',
       gonderen_ad: defaultHz().ad, gonderen_email: defaultHz().email, gonderen_tel: defaultHz().tel,
       kalemler: [{ ad: '', miktar: 1, birim: 'Adet', fiyat: 0, para: '€', teslim: '' }],
-      kosullar: sb ? clone(sb.kosullar) : [], ek_baslik: sb ? sb.ek_baslik : '', ek_metin: sb ? sb.ek_metin : '', ek_yeni_sayfa: sb ? sb.ek_yeni_sayfa : 0, toplam_goster: 0, kase: 0
+      kosullar: sb ? clone(sb.kosullar) : [], ek_baslik: sb ? sb.ek_baslik : '', ek_metin: sb ? sb.ek_metin : '', ek_yeni_sayfa: sb ? sb.ek_yeni_sayfa : 0, toplam_goster: 0, kase: 0,
+      belge: st.yeniBelge === 'proforma' ? 'proforma' : 'teklif', alici_unvan: '', alici_vd: '', alici_vn: '', alici_adres: '', gecerlilik: 0
     };
   }
   function loadEditor() {
     if (st.forms.E && String(st.forms.E.id || 'yeni') === String(st.id)) return st.forms.E;
     var E;
-    if (st.id === 'yeni') E = blankTeklif();
+    if (st.id === 'yeni') { E = blankTeklif(); st.yeniBelge = null; }
     else {
       var t = byId('teklif', st.id);
       if (!t) return null;
@@ -660,8 +661,18 @@
       '<div class="row" style="margin-top:10px"><button class="btn sm" type="button" data-act="kisi-add">+ Kişi ekle</button>' +
       (kayitli.length ? '<select class="inp" id="e-kayitli" style="width:auto"><option value="">Firmanın kayıtlı kişilerinden ekle…</option>' + kayitli.map(function (k) { return '<option value="' + k.id + '">' + esc(k.ad + (k.gorev ? ' – ' + k.gorev : '')) + '</option>'; }).join('') + '</select>' : '') + '</div>' +
       '<div class="form" style="margin-top:12px">' +
-      fld('Hitap satırı (PDF’te)', '<input id="e-hitap" data-bind="hitap" value="' + esc(E.hitap || autoHitap(E)) + '" placeholder="Sn. Mustafa Bey,">', 'full') +
+      (E.belge === 'proforma' ? '' : fld('Hitap satırı (PDF’te)', '<input id="e-hitap" data-bind="hitap" value="' + esc(E.hitap || autoHitap(E)) + '" placeholder="Sn. Mustafa Bey,">', 'full')) +
       '</div></section>';
+    if (E.belge === 'proforma') {
+      aliciDoldur(E);
+      musteri += '<section class="panel"><div class="sec-h"><h2>Alıcı (fatura) bilgileri</h2><span class="hint">Proforma faturada alıcı olarak basılır. Kayıtlı müşteride varsa otomatik gelir; kaydedince müşteri kartına da işlenir.</span></div><div class="form">' +
+        fld('Ticari ünvan', '<input id="e-aun" data-bind="alici_unvan" value="' + esc(E.alici_unvan) + '" placeholder="' + esc(E.firma || 'Firmanın tam ticari ünvanı') + '">', 'full') +
+        fld('Vergi dairesi', '<input id="e-avd" data-bind="alici_vd" value="' + esc(E.alici_vd) + '">') +
+        fld('Vergi no / T.C. kimlik no', '<input id="e-avn" data-bind="alici_vn" value="' + esc(E.alici_vn) + '" inputmode="numeric">') +
+        fld('Fatura adresi', '<textarea id="e-aad" data-bind="alici_adres" data-auto rows="2">' + esc(E.alici_adres) + '</textarea>', 'full') +
+        fld('Geçerlilik (gün)', '<input id="e-agec" data-bind="gecerlilik" data-num inputmode="numeric" value="' + esc(E.gecerlilik ? String(E.gecerlilik) : '') + '" placeholder="' + esc(String(s.proforma_gecerlilik || 30)) + '">') +
+        '</div>' + (String(s.banka_bilgileri || '').trim() ? '' : '<p class="hint" style="margin-top:8px">Banka bilgileri henüz girilmemiş. <a href="#ayarlar">Ayarlar → Proforma fatura</a> bölümünden IBAN ekleyin; PDF’te sağ altta basılır.</p>') + '</section>';
+    }
 
     var items = '<section class="panel"><div class="sec-h"><h2>Ürün ve hizmetler</h2><span class="hint">Fiyatlar KDV hariç. Ürün adında satır atlayabilirsiniz.</span></div>' +
       '<div class="item-h"><span>No</span><span>Ürün veya hizmet</span><span>Miktar</span><span>Birim</span><span>Birim fiyat</span><span>Para</span><span>Teslim süresi</span><span class="r">Toplam</span><span></span></div>' +
@@ -701,7 +712,8 @@
       '<label class="check full" for="e-ekn"><input id="e-ekn" type="checkbox" data-bind="ek_yeni_sayfa"' + (E.ek_yeni_sayfa ? ' checked' : '') + '> Yeni sayfada başlat (Fatura bilgileri ve Sipariş Teyidi ilk bölümün sonunda kalır)</label></div></section>';
 
     var side = '<aside class="ed-side"><div class="panel stack">' +
-      '<div class="row" style="justify-content:space-between"><h3>' + (isNew ? 'Yeni teklif' : esc(E.no)) + '</h3>' + durumChip(E.durum) + '</div>' +
+      '<div class="row" style="justify-content:space-between"><h3>' + (isNew ? (E.belge === 'proforma' ? 'Yeni proforma' : 'Yeni teklif') : esc(E.no)) + '</h3>' + durumChip(E.durum) + '</div>' +
+      fld('Belge türü', '<select id="e-belge" data-bind="belge"><option value="teklif"' + (E.belge !== 'proforma' ? ' selected' : '') + '>Fiyat teklifi</option><option value="proforma"' + (E.belge === 'proforma' ? ' selected' : '') + '>Proforma fatura</option></select>') +
       fld('Durum', '<select id="e-durum" data-bind="durum">' + Object.keys(DURUM).map(function (d) { return '<option value="' + d + '"' + (E.durum === d ? ' selected' : '') + '>' + DURUM[d][1] + '</option>'; }).join('') + '</select>') +
       fld('Tarih', '<input id="e-tarih" type="date" data-bind="tarih" value="' + esc(E.tarih) + '">') +
       fld('Hazırlayan (PDF’te Gönderen)', '<select id="e-gon" data-act-change="hazirlayan">' + hzOptions(E) + '</select>') +
@@ -711,13 +723,23 @@
       '</div><div class="panel stack">' +
       '<button class="btn" type="button" data-act="e-sablon-kaydet">Koşulları şablon olarak kaydet</button>' +
       (isNew ? '' : '<button class="btn" type="button" data-act="e-kopya">Kopyasını oluştur</button>') +
+      (isNew || E.belge === 'proforma' ? '' : '<button class="btn" type="button" data-act="e-kopya" data-belge="proforma">Proforma olarak kopyala</button>') +
       (!isNew && E.durum === 'onaylandi' && can('rego_fatura') ? '<button class="btn" type="button" data-act="e-faturala">Fatura kaydı oluştur</button>' : '') +
       (!isNew && (E.durum === 'onaylandi' || E.durum === 'faturalandi') && can('rego_proje_edit') ? '<button class="btn" type="button" data-act="e-proje">Proje aç</button>' : '') +
       (!isNew && can('rego_sil') ? '<button class="btn danger" type="button" data-act="e-sil">Teklifi sil</button>' : '') +
       '<a class="btn ghost" href="#teklif">← Tekliflere dön</a></div></aside>';
 
-    return dl + '<div class="head"><div><h1>' + (isNew ? 'Yeni fiyat teklifi' : esc(E.firma || 'Teklif')) + '</h1><p class="sub">' + (isNew ? 'Firma, kalemler ve koşulları girin; PDF hazır formatta çıkar.' : esc(E.no) + ' · ' + fmtD(E.tarih)) + '</p></div></div>' +
+    return dl + '<div class="head"><div><h1>' + (isNew ? (E.belge === 'proforma' ? 'Yeni proforma fatura' : 'Yeni fiyat teklifi') : esc(E.firma || 'Teklif')) + '</h1><p class="sub">' + (isNew ? 'Firma, kalemler ve koşulları girin; PDF hazır formatta çıkar.' : (E.belge === 'proforma' ? 'Proforma fatura · ' : '') + esc(E.no) + ' · ' + fmtD(E.tarih)) + '</p></div></div>' +
       '<div class="ed" data-root="E"><div class="stack" style="gap:16px">' + musteri + items + gal + kos + ek + '</div>' + side + '</div>';
+  }
+  /* Fills empty buyer fields from the customer record. */
+  function aliciDoldur(E) {
+    var m = E.musteri_id ? byId('musteri', E.musteri_id) : null;
+    if (!m) return;
+    if (!E.alici_unvan && m.unvan) E.alici_unvan = m.unvan;
+    if (!E.alici_vd && m.vergi_dairesi) E.alici_vd = m.vergi_dairesi;
+    if (!E.alici_vn && m.vergi_no) E.alici_vn = m.vergi_no;
+    if (!E.alici_adres && m.adres) E.alici_adres = m.adres;
   }
   function hzOptions(E) {
     var hs = hazirlayanlar().slice();
@@ -768,6 +790,7 @@
         return;
       }
     }
+    if (p === 'belge') { rerenderEditorKeepFocus('e-belge'); return; }
     if (p === 'firma') { var fd = $('#e-firma-durum'); if (fd) fd.innerHTML = firmaDurum(E); }
     if (p === 'hitap') E._hitapManual = el.value.trim() !== '' && el.value !== autoHitap(E);
     if (/^kisiler\./.test(p) && !E._hitapManual) { E.hitap = autoHitap(E); var hi = $('#e-hitap'); if (hi) hi.value = E.hitap; }
@@ -806,7 +829,7 @@
   }
   function editorPayload(E) {
     var o = {};
-    ['musteri_id', 'firma', 'kisiler', 'hitap', 'tarih', 'gonderen_id', 'gonderen_ad', 'gonderen_email', 'gonderen_tel', 'durum', 'kalemler', 'kosullar', 'gorseller', 'ek_baslik', 'ek_metin', 'ek_yeni_sayfa', 'toplam_goster', 'kase'].forEach(function (k) { o[k] = E[k]; });
+    ['musteri_id', 'firma', 'kisiler', 'hitap', 'tarih', 'gonderen_id', 'gonderen_ad', 'gonderen_email', 'gonderen_tel', 'durum', 'kalemler', 'kosullar', 'gorseller', 'ek_baslik', 'ek_metin', 'ek_yeni_sayfa', 'toplam_goster', 'kase', 'belge', 'alici_unvan', 'alici_vd', 'alici_vn', 'alici_adres', 'gecerlilik'].forEach(function (k) { o[k] = E[k]; });
     if (!o.hitap) o.hitap = autoHitap(E);
     return o;
   }
@@ -827,11 +850,22 @@
       st.dirty = false;
       var E2 = st.forms.E; setTimeout(function () { if (st.forms.E === E2 && !st.dirty) snap('E'); }, 0);
       if (wasNew) { history.replaceState(null, '', '#teklif/' + r.item.id); st.id = String(r.item.id); }
+      musteriAliciYaz(r.item);
       render();
       return r.item;
     });
   }
 
+  function musteriAliciYaz(t) {
+    if (t.belge !== 'proforma' || !t.musteri_id || !can('rego_musteri_edit')) return;
+    var m = byId('musteri', t.musteri_id); if (!m) return;
+    var d = {}, map = { unvan: 'alici_unvan', vergi_dairesi: 'alici_vd', vergi_no: 'alici_vn', adres: 'alici_adres' };
+    Object.keys(map).forEach(function (k) { if (!String(m[k] || '').trim() && String(t[map[k]] || '').trim()) d[k] = t[map[k]]; });
+    if (!Object.keys(d).length) return;
+    var body = { firma: m.firma, email: m.email, tel: m.tel, sehir: m.sehir, sektor: m.sektor, notlar: m.notlar, unvan: m.unvan, vergi_dairesi: m.vergi_dairesi, vergi_no: m.vergi_no, adres: m.adres };
+    Object.keys(d).forEach(function (k) { body[k] = d[k]; });
+    api('musteri/' + m.id, 'PUT', body).then(function (r) { upsert('musteri', r.item); }).catch(function () {});
+  }
   function faturaBody() {
     var tab = st.tab.fatura || 'acik';
     var all = list('fatura').filter(function (f) { return match([f.no, firma(f.musteri_id)].join(' ')); });
@@ -1120,6 +1154,12 @@
       fld('Sipariş teyidi metni', '<textarea id="s-teyit" data-bind="teyit_metni" data-auto rows="2">' + esc(S.teyit_metni) + '</textarea>') +
       fld('Sipariş teyidi alt satırı', '<input id="s-teyit2" data-bind="teyit_alt" value="' + esc(S.teyit_alt) + '">') +
       '</div></section>' +
+      '<section class="panel"><div class="panel-h"><div><h2>Proforma fatura</h2><p>Teklif ekranında “Belge türü: Proforma fatura” seçilince ya da “Proforma olarak kopyala” ile kullanılır. Burs, BAP ve satın alma başvuruları için.</p></div></div><div class="form">' +
+      fld('Belge başlığı', '<input id="s-pfb" data-bind="proforma_baslik" value="' + esc(S.proforma_baslik || 'Proforma Fatura') + '">') +
+      fld('Varsayılan geçerlilik (gün)', '<input id="s-pfg" data-bind="proforma_gecerlilik" data-num inputmode="numeric" value="' + esc(String(S.proforma_gecerlilik || 30)) + '">') +
+      fld('Banka bilgileri (PDF’te sağ altta)', '<textarea id="s-banka" data-bind="banka_bilgileri" data-auto rows="3" placeholder="Banka: …\nHesap adı: Rego Technology\nIBAN: TR..">' + esc(S.banka_bilgileri || '') + '</textarea>', 'full') +
+      fld('Proforma notu (en altta)', '<textarea id="s-pfn" data-bind="proforma_notu" data-auto rows="2">' + esc(S.proforma_notu || '') + '</textarea>', 'full') +
+      '</div></section>' +
       '<section class="panel"><div class="panel-h"><div><h2>Teklifi hazırlayanlar</h2><p>Teklif ekranındaki “Hazırlayan” listesi. Seçilen kişinin adı, e-postası ve telefonu PDF’te Gönderen bölümüne yazılır.</p></div><button class="btn sm" type="button" data-act="hz-add">+ Kişi ekle</button></div><div class="stack">' +
       (S.hazirlayanlar || []).map(function (h, i) {
         return '<div class="form c4" style="align-items:end">' +
@@ -1213,7 +1253,7 @@
 
   function musteriModal(m, onSaved) {
     var ed = can('rego_musteri_edit');
-    m = m || { firma: '', kisi: '', hitap: 'Bey', email: '', tel: '', sehir: '', sektor: '', notlar: '' };
+    m = m || { firma: '', kisi: '', hitap: 'Bey', email: '', tel: '', sehir: '', sektor: '', notlar: '', unvan: '', vergi_dairesi: '', vergi_no: '', adres: '' };
     var extra = '';
     if (m.id) {
       var ts = list('teklif').filter(function (t) { return t.musteri_id === m.id; }).slice(0, 5);
@@ -1235,6 +1275,11 @@
       fld('Firma telefonu', '<input id="m-tel" type="tel" value="' + esc(m.tel) + '"' + dis + '>') +
       fld('Şehir', '<input id="m-sehir" value="' + esc(m.sehir) + '"' + dis + '>') +
       fld('Sektör', '<input id="m-sektor" value="' + esc(m.sektor) + '" placeholder="Otomotiv, kalıp, savunma…"' + dis + '>') +
+      '<div class="full"><h3 style="margin:4px 0 0">Fatura bilgileri <span class="muted small" style="font-weight:400">(proforma için)</span></h3></div>' +
+      fld('Ticari ünvan', '<input id="m-unvan" value="' + esc(m.unvan || '') + '"' + dis + '>', 'full') +
+      fld('Vergi dairesi', '<input id="m-vd" value="' + esc(m.vergi_dairesi || '') + '"' + dis + '>') +
+      fld('Vergi no / T.C. no', '<input id="m-vn" value="' + esc(m.vergi_no || '') + '"' + dis + ' inputmode="numeric">') +
+      fld('Fatura adresi', '<textarea id="m-adres" data-auto rows="2"' + dis + '>' + esc(m.adres || '') + '</textarea>', 'full') +
       fld('Notlar', '<textarea id="m-not" data-auto rows="2"' + dis + '>' + esc(m.notlar || '') + '</textarea>', 'full') + '</div>' + extra,
       {
         root: 'M', wide: true,
@@ -1244,7 +1289,7 @@
           if (!ed) return true;
           if (!val('m-firma')) { toast('Firma adını girin.', true); return false; }
           var ks = st.forms.M.kisiler.filter(function (k) { return String(k.ad || '').trim(); });
-          return api(m.id ? 'musteri/' + m.id : 'musteri', m.id ? 'PUT' : 'POST', { firma: val('m-firma'), kisiler: ks, email: val('m-email'), tel: val('m-tel'), sehir: val('m-sehir'), sektor: val('m-sektor'), notlar: val('m-not') })
+          return api(m.id ? 'musteri/' + m.id : 'musteri', m.id ? 'PUT' : 'POST', { firma: val('m-firma'), kisiler: ks, email: val('m-email'), tel: val('m-tel'), sehir: val('m-sehir'), sektor: val('m-sektor'), notlar: val('m-not'), unvan: val('m-unvan'), vergi_dairesi: val('m-vd'), vergi_no: val('m-vn'), adres: val('m-adres') })
             .then(function (r) { kisiSync(r); upsert('musteri', r.item); toast(m.id ? 'Müşteri güncellendi' : 'Müşteri eklendi'); if (onSaved) onSaved(r.item); render(); });
         }
       });
@@ -1706,6 +1751,8 @@
       case 'blog-aktar': a.disabled = true; a.textContent = 'Ekleniyor…';
         api('blog', 'POST', {}).then(function (j) { st.blog = { yazilar: j.yazilar }; render(); toast(j.yeni + ' yazı taslak olarak eklendi'); })
           .catch(function (er) { a.disabled = false; a.textContent = 'Siteye taslak olarak ekle'; fail(er); }); break;
+      case 'yeni-proforma': case 'yeni-teklif':
+        st.yeniBelge = act === 'yeni-proforma' ? 'proforma' : 'teklif'; st.forms.E = null; go('teklif/yeni'); break;
       case 'kase-dondur': a.disabled = true; api('kase/dondur', 'POST', {}).then(function (j) { kaseGuncelle(j); }).catch(function (er) { a.disabled = false; fail(er); }); break;
       case 'kase-sil': api('kase', 'DELETE').then(function (j) { kaseGuncelle(j); toast('Varsayılan kaşe kullanılacak'); }).catch(fail); break;
       case 'proje-new': projeModal(); break;
@@ -1790,7 +1837,8 @@
         }).catch(function (er) { if (win) win.close(); if (er.message !== 'skip') fail(er); });
         break;
       case 'e-kopya':
-        api('teklif/' + st.forms.E.id + '/kopyala', 'POST', {}).then(function (r) { upsert('teklif', r.item); st.forms.E = null; go('teklif/' + r.item.id); toast('Kopya oluşturuldu: ' + r.item.no); }).catch(fail);
+        var pfk = a.getAttribute('data-belge') === 'proforma';
+        api('teklif/' + st.forms.E.id + '/kopyala', 'POST', pfk ? { belge: 'proforma' } : {}).then(function (r) { upsert('teklif', r.item); st.forms.E = null; go('teklif/' + r.item.id); toast((pfk ? 'Proforma oluşturuldu: ' : 'Kopya oluşturuldu: ') + r.item.no); }).catch(fail);
         break;
       case 'e-sil':
         var bar = document.createElement('div');

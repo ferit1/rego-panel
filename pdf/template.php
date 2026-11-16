@@ -9,6 +9,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 $f   = REGO_PANEL_DIR . 'pdf/fonts/';
 $dash = function ( $v ) { return '' !== trim( (string) $v ) ? esc_html( $v ) : '-'; };
 $year = gmdate( 'Y', strtotime( $t['tarih'] ) );
+$pf   = 'proforma' === ( $t['belge'] ?? '' );
+$gun  = $pf ? ( (int) $t['gecerlilik'] > 0 ? (int) $t['gecerlilik'] : (int) ( $s['proforma_gecerlilik'] ?? 30 ) ) : 0;
+$banka = trim( (string) ( $s['banka_bilgileri'] ?? '' ) );
 
 $teyit = function () use ( $s, $year ) {
 	?>
@@ -19,7 +22,18 @@ $teyit = function () use ( $s, $year ) {
 	</div>
 	<?php
 };
-$footer = function () use ( $s, $t, $teyit ) {
+$bankaKutu = function () use ( $banka ) {
+	if ( '' === $banka ) {
+		return;
+	}
+	?>
+	<div class="ty bk">
+		<div class="tyh bkh">Banka Bilgileri</div>
+		<div class="bkt"><?php echo nl2br( esc_html( $banka ) ); ?></div>
+	</div>
+	<?php
+};
+$footer = function () use ( $s, $t, $teyit, $pf, $bankaKutu ) {
 	?>
 	<?php $kase = ! empty( $t['kase'] ); ?>
 	<table class="foot<?php echo $kase ? ' kv' : ''; ?>"><tr>
@@ -34,7 +48,7 @@ $footer = function () use ( $s, $t, $teyit ) {
 		<?php if ( $kase ) : ?>
 		<td class="ksw"><div class="ksh">Kaşe / İmza</div><img class="ks" src="<?php echo esc_attr( rego_kase_yolu( $s ) ); ?>"></td>
 		<?php endif; ?>
-		<td class="tyw"><?php $teyit(); ?></td>
+		<td class="tyw"><?php $pf ? $bankaKutu() : $teyit(); ?></td>
 	</tr></table>
 	<?php
 };
@@ -108,12 +122,36 @@ table.foot td{vertical-align:bottom;padding:0}
 .tyh{font-weight:bold;font-size:7.6pt;text-align:center;padding-right:40pt}
 .tyd{font-size:7.6pt;text-align:center;margin-top:5pt;padding-right:40pt}
 .tyt{margin-top:42pt;font-size:5.9pt;line-height:1.45}
+table.pt{margin-top:6pt;margin-left:auto;border-collapse:collapse;font-family:'Mont';font-size:7.4pt;width:210pt}
+table.pt td{padding:3pt 8pt;border-bottom:.6pt solid #ccc;text-align:right}
+table.pt td.l{text-align:left;color:#444}
+table.pt tr.g td{font-weight:bold;font-size:8.4pt;border-bottom:1.4pt solid #111;color:#111}
+.pn{margin-top:14pt;font-family:'Mont';font-size:6.4pt;color:#555;font-style:italic;text-align:center}
+.bk{padding:10pt 14pt 10pt 14pt}
+.bkh{padding-right:0}
+.bkt{margin-top:6pt;font-family:'Mont';font-size:6.6pt;line-height:1.6;color:#333}
 </style></head><body>
 <img class="bg" src="<?php echo esc_attr( REGO_PANEL_DIR . 'pdf/page-bg.png' ); ?>">
 <img class="logo" src="<?php echo esc_attr( REGO_PANEL_DIR . 'assets/logo.png' ); ?>">
-<div class="title"><?php echo esc_html( $s['teklif_baslik'] ); ?></div>
+<div class="title"><?php echo esc_html( $pf ? ( $s['proforma_baslik'] ?? 'Proforma Fatura' ) : $s['teklif_baslik'] ); ?></div>
 
 <table class="info"><tr>
+<?php if ( $pf ) : ?>
+	<td>
+		<div><b>Alıcı:</b> <?php echo esc_html( '' !== trim( $t['alici_unvan'] ) ? $t['alici_unvan'] : $t['firma'] ); ?></div>
+		<div><b>Vergi Dairesi / No:</b> <?php echo $dash( trim( $t['alici_vd'] . ( $t['alici_vd'] && $t['alici_vn'] ? ' / ' : '' ) . $t['alici_vn'] ) ); // phpcs:ignore ?></div>
+		<div><b>Adres:</b> <?php echo '' !== trim( $t['alici_adres'] ) ? nl2br( esc_html( $t['alici_adres'] ) ) : '-'; ?></div>
+		<div><b>İlgili Kişi:</b> <?php echo $dash( $t['kisi'] ); // phpcs:ignore ?><?php echo $t['kisi_email'] ? ' · ' . esc_html( $t['kisi_email'] ) : ''; ?></div>
+		<div class="ln"></div>
+	</td>
+	<td class="r">
+		<div><b>Proforma No:</b> <?php echo esc_html( $t['no'] ); ?></div>
+		<div><b>Tarih:</b> <?php echo esc_html( rego_date_tr( $t['tarih'] ) ); ?></div>
+		<div><b>Geçerlilik:</b> <?php echo esc_html( rego_date_tr( gmdate( 'Y-m-d', strtotime( $t['tarih'] . ' +' . $gun . ' days' ) ) ) ); ?> (<?php echo (int) $gun; ?> gün)</div>
+		<div><b>Düzenleyen:</b> <?php echo $dash( $g['ad'] ); // phpcs:ignore ?></div>
+		<div class="ln"></div>
+	</td>
+<?php else : ?>
 	<td>
 		<div><b>Firma:</b> <?php echo esc_html( $t['firma'] ); ?></div>
 		<div><b>İlgili Kişi:</b> <?php echo $dash( $t['kisi'] ); // phpcs:ignore ?></div>
@@ -128,9 +166,10 @@ table.foot td{vertical-align:bottom;padding:0}
 		<div><b>Tel:</b> <?php echo $dash( $g['tel'] ); // phpcs:ignore ?></div>
 		<div class="ln"></div>
 	</td>
+<?php endif; ?>
 </tr></table>
 
-<div class="hi"><?php if ( $hitap ) : ?><b><?php echo esc_html( $hitap ); ?></b><?php endif; ?><?php echo esc_html( $s['giris_metni'] ); ?></div>
+<?php if ( $pf ) : ?><div class="hi"></div><?php else : ?><div class="hi"><?php if ( $hitap ) : ?><b><?php echo esc_html( $hitap ); ?></b><?php endif; ?><?php echo esc_html( $s['giris_metni'] ); ?></div><?php endif; ?>
 
 <table class="k">
 	<thead><tr>
@@ -153,8 +192,19 @@ table.foot td{vertical-align:bottom;padding:0}
 	<?php endforeach; ?>
 	</tbody>
 </table>
+<?php if ( $pf ) : ?>
+	<?php $oran = rego_kdv_orani( $s ); ?>
+	<table class="pt">
+	<?php foreach ( $t['toplamlar'] as $para => $ara ) : ?>
+		<tr><td class="l">Ara Toplam</td><td><?php echo esc_html( rego_num( $ara ) . ' ' . $para ); ?></td></tr>
+		<tr><td class="l">KDV (%<?php echo esc_html( rego_num( $oran ) ); ?>)</td><td><?php echo esc_html( rego_num( round( $ara * $oran / 100, 2 ) ) . ' ' . $para ); ?></td></tr>
+		<tr class="g"><td class="l">Genel Toplam</td><td><?php echo esc_html( rego_num( round( $ara * ( 1 + $oran / 100 ), 2 ) ) . ' ' . $para ); ?></td></tr>
+	<?php endforeach; ?>
+	</table>
+<?php else : ?>
 <div class="kdv"><?php echo esc_html( rego_kdv_notu( $s ) ); ?></div>
-<?php if ( $t['toplam_goster'] && $t['toplamlar'] ) : ?>
+<?php endif; ?>
+<?php if ( ! $pf && $t['toplam_goster'] && $t['toplamlar'] ) : ?>
 	<div class="tot">Toplam (KDV hariç):
 		<?php echo esc_html( implode( '  +  ', array_map( function ( $p, $v ) { return rego_num( $v ) . ' ' . $p; }, array_keys( $t['toplamlar'] ), $t['toplamlar'] ) ) ); ?>
 	</div>
@@ -176,7 +226,7 @@ table.foot td{vertical-align:bottom;padding:0}
 <?php endif; ?>
 
 <?php if ( $t['kosullar'] ) : ?>
-	<div class="kh">Teklif Koşulları</div>
+	<div class="kh"><?php echo $pf ? 'Koşullar' : 'Teklif Koşulları'; ?></div>
 	<div class="ko">
 	<?php foreach ( $t['kosullar'] as $k ) : ?>
 		<div class="kr"><div class="b"><?php echo esc_html( $k['baslik'] ); ?></div><div class="md"><?php echo rego_markup( $k['metin'] ); // phpcs:ignore ?></div></div>
@@ -184,6 +234,9 @@ table.foot td{vertical-align:bottom;padding:0}
 	</div>
 <?php endif; ?>
 
+<?php if ( $pf && '' !== trim( (string) ( $s['proforma_notu'] ?? '' ) ) ) : ?>
+	<div class="pn"><?php echo esc_html( $s['proforma_notu'] ); ?></div>
+<?php endif; ?>
 <?php
 if ( $t['ek_yeni_sayfa'] ) {
 	$footer();

@@ -20,6 +20,7 @@ function rego_resources() {
 			'fields' => array(
 				'firma' => $text, 'kisi' => $text, 'hitap' => $text, 'email' => 'sanitize_email', 'tel' => $text,
 				'sehir' => $text, 'sektor' => $text, 'notlar' => $area,
+				'unvan' => $text, 'vergi_dairesi' => $text, 'vergi_no' => $text, 'adres' => $area,
 			),
 			'required' => array( 'firma' ),
 		),
@@ -43,6 +44,7 @@ function rego_resources() {
 				'gonderen_ad' => $text, 'gonderen_email' => 'sanitize_email', 'gonderen_tel' => $text,
 				'kalemler' => 'rego_clean_kalemler', 'kosullar' => 'rego_clean_kosullar', 'kisiler' => 'rego_clean_teklif_kisiler', 'gorseller' => 'rego_clean_gorseller',
 				'ek_baslik' => $text, 'ek_metin' => $area, 'ek_yeni_sayfa' => 'rego_clean_bool', 'toplam_goster' => 'rego_clean_bool', 'kase' => 'rego_clean_bool',
+				'belge' => 'rego_clean_belge', 'alici_unvan' => $text, 'alici_vd' => $text, 'alici_vn' => $text, 'alici_adres' => $area, 'gecerlilik' => $int,
 			),
 			'required' => array( 'firma' ),
 		),
@@ -128,6 +130,9 @@ function rego_clean_tekrar( $v ) {
 }
 function rego_clean_asama( $v ) {
 	return in_array( $v, array( 'bekle', 'onay', 'tarama', 'model', 'teslim' ), true ) ? $v : 'onay';
+}
+function rego_clean_belge( $v ) {
+	return 'proforma' === $v ? 'proforma' : 'teklif';
 }
 function rego_clean_durum( $v ) {
 	return in_array( $v, array( 'taslak', 'gonderildi', 'onaylandi', 'reddedildi', 'faturalandi' ), true ) ? $v : 'taslak';
@@ -598,6 +603,17 @@ function rego_api_teklif_kopyala( WP_REST_Request $req ) {
 	$t['durum']       = 'taslak';
 	$t['gonderen_id'] = get_current_user_id();
 	$t['created_at']  = $t['updated_at'] = rego_now();
+	if ( 'proforma' === $req->get_param( 'belge' ) ) {
+		// "Proforma olarak kopyala": same lines, buyer details from the customer record.
+		$t['belge'] = 'proforma';
+		$m = $t['musteri_id'] ? $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . rego_t( 'musteri' ) . ' WHERE id = %d', (int) $t['musteri_id'] ), ARRAY_A ) : null; // phpcs:ignore
+		if ( $m ) {
+			$t['alici_unvan'] = $t['alici_unvan'] ? $t['alici_unvan'] : (string) ( $m['unvan'] ?? '' );
+			$t['alici_vd']    = $t['alici_vd'] ? $t['alici_vd'] : (string) ( $m['vergi_dairesi'] ?? '' );
+			$t['alici_vn']    = $t['alici_vn'] ? $t['alici_vn'] : (string) ( $m['vergi_no'] ?? '' );
+			$t['alici_adres'] = $t['alici_adres'] ? $t['alici_adres'] : (string) ( $m['adres'] ?? '' );
+		}
+	}
 	$wpdb->insert( rego_t( 'teklif' ), $t );
 	return array( 'item' => rego_api_get( 'teklif', $wpdb->insert_id ) );
 }
@@ -628,15 +644,18 @@ function rego_api_teklif_faturala( WP_REST_Request $req ) {
 function rego_api_ayarlar( WP_REST_Request $req ) {
 	$p = (array) $req->get_json_params();
 	$s = rego_settings();
-	foreach ( array( 'firma_unvan', 'vergi_no', 'telefon', 'email', 'web', 'teklif_baslik', 'teklif_onek', 'teyit_alt' ) as $k ) {
+	foreach ( array( 'firma_unvan', 'vergi_no', 'telefon', 'email', 'web', 'teklif_baslik', 'teklif_onek', 'teyit_alt', 'proforma_baslik' ) as $k ) {
 		if ( isset( $p[ $k ] ) ) {
 			$s[ $k ] = rego_text( $p[ $k ] );
 		}
 	}
-	foreach ( array( 'adres', 'giris_metni', 'kdv_notu', 'teyit_metni' ) as $k ) {
+	foreach ( array( 'adres', 'giris_metni', 'kdv_notu', 'teyit_metni', 'proforma_notu', 'banka_bilgileri' ) as $k ) {
 		if ( isset( $p[ $k ] ) ) {
 			$s[ $k ] = rego_textarea( $p[ $k ] );
 		}
+	}
+	if ( isset( $p['proforma_gecerlilik'] ) ) {
+		$s['proforma_gecerlilik'] = max( 0, min( 365, (int) $p['proforma_gecerlilik'] ) );
 	}
 	foreach ( array( 'birimler', 'hizmetler', 'gider_kategorileri', 'gelir_kategorileri', 'hesaplar', 'gorevler', 'kargo_firmalari' ) as $k ) {
 		if ( isset( $p[ $k ] ) ) {

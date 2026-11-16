@@ -34,7 +34,7 @@ function rego_pdf_handler() {
 function rego_pdf_filename( $t ) {
 	$tr   = array( 'ç' => 'c', 'Ç' => 'C', 'ğ' => 'g', 'Ğ' => 'G', 'ı' => 'i', 'İ' => 'I', 'ö' => 'o', 'Ö' => 'O', 'ş' => 's', 'Ş' => 'S', 'ü' => 'u', 'Ü' => 'U' );
 	$firm = preg_replace( '/[^A-Za-z0-9]+/', '_', strtr( $t['firma'], $tr ) );
-	return 'Fiyat_Teklifi_' . trim( $firm, '_' ) . '_' . $t['no'] . '.pdf';
+	return ( 'proforma' === ( $t['belge'] ?? '' ) ? 'Proforma_Fatura_' : 'Fiyat_Teklifi_' ) . trim( $firm, '_' ) . '_' . $t['no'] . '.pdf';
 }
 
 /** Builds the quote PDF and returns its bytes. */

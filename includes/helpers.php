@@ -214,6 +214,9 @@ function rego_row( $type, $r ) {
 		$r['ek_yeni_sayfa'] = (int) $r['ek_yeni_sayfa'];
 		$r['toplam_goster'] = (int) $r['toplam_goster'];
 		$r['kase']          = (int) ( $r['kase'] ?? 0 );
+		$r['belge']         = ( $r['belge'] ?? '' ) === 'proforma' ? 'proforma' : 'teklif';
+		$r['gecerlilik']    = (int) ( $r['gecerlilik'] ?? 0 );
+		$r['alici_adres']   = (string) ( $r['alici_adres'] ?? '' );
 		$r['toplamlar']     = rego_teklif_toplam( $r['kalemler'] );
 	}
 	if ( 'kargo' === $type ) {
