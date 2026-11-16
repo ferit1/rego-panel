@@ -12,6 +12,14 @@ $year = gmdate( 'Y', strtotime( $t['tarih'] ) );
 $pf   = 'proforma' === ( $t['belge'] ?? '' );
 $gun  = $pf ? ( (int) $t['gecerlilik'] > 0 ? (int) $t['gecerlilik'] : (int) ( $s['proforma_gecerlilik'] ?? 30 ) ) : 0;
 $banka = trim( (string) ( $s['banka_bilgileri'] ?? '' ) );
+if ( $pf && $t['musteri_id'] && ( '' === trim( $t['kisi_email'] ) || '' === trim( $t['kisi_tel'] ) ) ) {
+	// No contact person details: fall back to the company's own e-mail and phone.
+	$mu = rego_api_get( 'musteri', (int) $t['musteri_id'] );
+	if ( $mu ) {
+		$t['kisi_email'] = '' !== trim( $t['kisi_email'] ) ? $t['kisi_email'] : (string) $mu['email'];
+		$t['kisi_tel']   = '' !== trim( $t['kisi_tel'] ) ? $t['kisi_tel'] : (string) $mu['tel'];
+	}
+}
 
 $teyit = function () use ( $s, $year ) {
 	?>
@@ -141,14 +149,24 @@ table.pt tr.g td{font-weight:bold;font-size:8.4pt;border-bottom:1.4pt solid #111
 		<div><b>Alıcı:</b> <?php echo esc_html( '' !== trim( $t['alici_unvan'] ) ? $t['alici_unvan'] : $t['firma'] ); ?></div>
 		<div><b>Vergi Dairesi / No:</b> <?php echo $dash( trim( $t['alici_vd'] . ( $t['alici_vd'] && $t['alici_vn'] ? ' / ' : '' ) . $t['alici_vn'] ) ); // phpcs:ignore ?></div>
 		<div><b>Adres:</b> <?php echo '' !== trim( $t['alici_adres'] ) ? nl2br( esc_html( $t['alici_adres'] ) ) : '-'; ?></div>
-		<div><b>İlgili Kişi:</b> <?php echo $dash( $t['kisi'] ); // phpcs:ignore ?><?php echo $t['kisi_email'] ? ' · ' . esc_html( $t['kisi_email'] ) : ''; ?></div>
+		<div><b>İlgili Kişi:</b> <?php echo $dash( $t['kisi'] ); // phpcs:ignore ?></div>
+		<div><b>E-Mail:</b> <?php echo $dash( $t['kisi_email'] ); // phpcs:ignore ?></div>
+		<div><b>Tel:</b> <?php echo $dash( $t['kisi_tel'] ); // phpcs:ignore ?></div>
 		<div class="ln"></div>
 	</td>
 	<td class="r">
 		<div><b>Proforma No:</b> <?php echo esc_html( $t['no'] ); ?></div>
 		<div><b>Tarih:</b> <?php echo esc_html( rego_date_tr( $t['tarih'] ) ); ?></div>
 		<div><b>Geçerlilik:</b> <?php echo esc_html( rego_date_tr( gmdate( 'Y-m-d', strtotime( $t['tarih'] . ' +' . $gun . ' days' ) ) ) ); ?> (<?php echo (int) $gun; ?> gün)</div>
+		<?php
+		$termin = array_values( array_unique( array_filter( array_map( function ( $k ) { return trim( (string) ( $k['teslim'] ?? '' ) ); }, $t['kalemler'] ) ) ) );
+		if ( $termin ) :
+			?>
+		<div><b>Termin Süresi:</b> <?php echo esc_html( implode( ', ', $termin ) ); ?></div>
+		<?php endif; ?>
 		<div><b>Düzenleyen:</b> <?php echo $dash( $g['ad'] ); // phpcs:ignore ?></div>
+		<div><b>E-Mail:</b> <?php echo $dash( $g['email'] ); // phpcs:ignore ?></div>
+		<div><b>Tel:</b> <?php echo $dash( $g['tel'] ); // phpcs:ignore ?></div>
 		<div class="ln"></div>
 	</td>
 <?php else : ?>

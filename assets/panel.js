@@ -579,7 +579,7 @@
       }).join('') || emptyRow(8, st.q ? 'Aramayla eşleşen teklif yok.' : 'Bu listede teklif yok.', st.q ? '' : ' “+ Yeni teklif” ile başlayın.')) +
       '</tbody></table></div></section>';
   };
-  function pdfUrl(id, dl) { return B.pdf_url + '&id=' + id + '&_wpnonce=' + B.pdf_nonce + (dl ? '&indir=1' : ''); }
+  function pdfUrl(id, dl) { return B.pdf_url + '&id=' + id + '&_wpnonce=' + B.pdf_nonce + (dl ? '&indir=1' : '') + '&v=' + Date.now(); }
 
   /* ----- quote editor ----- */
   function blankTeklif() {
@@ -1830,7 +1830,7 @@
       case 'e-pdf':
         var dl = !!a.dataset.dl;
         var win = dl ? null : window.open('about:blank', '_blank');
-        var need = st.dirty || !st.forms.E.id;
+        var need = st.dirty || isDirty() || !st.forms.E.id;
         (need ? saveEditor() : Promise.resolve(st.forms.E)).then(function (it) {
           var u = pdfUrl(it.id, dl);
           if (dl) location.href = u; else if (win) win.location = u; else window.open(u, '_blank');
