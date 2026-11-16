@@ -1,6 +1,6 @@
 {
-  "version": "1.9.0",
-  "package": "https://github.com/ferit1/rego-panel/archive/d0819fd0e44fcdd311466b4f06f37c7cd9aeff7d.zip",
+  "version": "1.9.1",
+  "package": "https://github.com/ferit1/rego-panel/archive/2402c9b8d8330acb3c2d71611ac0cb81f41ecdff.zip",
   "date": "2026-11-16",
-  "notes": "Proforma fatura: Teklifler sayfasında \"+ Proforma fatura\", teklif ekranında \"Belge türü\" ve \"Proforma olarak kopyala\". Alıcı ünvanı, vergi dairesi/no, adres, geçerlilik süresi; PDF'te Ara toplam / KDV / Genel toplam ve banka bilgileri. Ayarlar → Proforma fatura bölümünden banka (IBAN) bilgileri girilir. Müşteri kartına fatura bilgileri eklendi."
+  "notes": "Proforma faturanın üst kısmına alıcı ve düzenleyen e-posta/telefonu ile Termin Süresi eklendi. PDF açılırken kaydedilmemiş değişiklikler önce kaydedilir ve her seferinde güncel PDF açılır."
 }
